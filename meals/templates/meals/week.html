@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Meals - Week of {{ start_date|date:"M j" }}{% endblock %}
+
+{% block content %}
+<h1>Meal Plan</h1>
+<p>{{ start_date|date:"F j" }} &ndash; {{ end_date|date:"F j, Y" }}</p>
+
+<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin-top: 20px;">
+    {% for day in days %}
+    <div class="card">
+        <div style="font-weight: 600; margin-bottom: 8px;">
+            {{ day.date|date:"l" }}<br>
+            <span style="font-weight: 400; color: #6b7280;">{{ day.date|date:"M j" }}</span>
+        </div>
+        {% if day.meals %}
+            {% for meal in day.meals %}
+            <div style="margin-bottom: 6px;">
+                <a href="{% url 'meals:meal_detail' pk=meal.id %}">{{ meal.name }}</a>
+                <span style="color: #9ca3af; font-size: 12px;">{{ meal.meal_type }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="color: #9ca3af; font-size: 14px;">No meals</div>
+        {% endif %}
+        <a href="{% url 'meals:meal_create' %}?date={{ day.date|date:'Y-m-d' }}" style="font-size: 13px; color: #6b7280;">+ Add meal</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
