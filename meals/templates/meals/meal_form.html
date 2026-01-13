@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Meals{% endblock %}
+
+{% block extra_head %}
+<style>
+    .form-group {
+        margin-bottom: 16px;
+    }
+    .form-group label {
+        display: block;
+        font-weight: 500;
+        margin-bottom: 6px;
+        color: #374151;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #6b7280;
+    }
+    .form-group .error-input {
+        border-color: #ef4444;
+    }
+    .form-group .errors {
+        color: #ef4444;
+        font-size: 13px;
+        margin-top: 4px;
+    }
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+    }
+    .btn-primary {
+        background: #111;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    .btn-primary:hover {
+        background: #333;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 16px;">
+    <a href="{% url 'meals:week' %}">&larr; Back to week</a>
+</div>
+
+<div class="card" style="max-width: 500px;">
+    <h1 style="margin: 0 0 20px 0;">{{ title }}</h1>
+
+    {% if form.non_field_errors %}
+    <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 16px; color: #dc2626;">
+        {% for error in form.non_field_errors %}
+        <div>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="id_name">Name</label>
+            <input type="text" name="name" id="id_name" value="{{ form.name.value|default:'' }}"
+                   placeholder="Meal name" required
+                   class="{% if form.name.errors %}error-input{% endif %}">
+            {% if form.name.errors %}
+            <div class="errors">
+                {% for error in form.name.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="id_date">Date</label>
+            <input type="date" name="date" id="id_date" value="{{ form.date.value|date:'Y-m-d' }}" required
+                   class="{% if form.date.errors %}error-input{% endif %}">
+            {% if form.date.errors %}
+            <div class="errors">
+                {% for error in form.date.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="id_meal_type">Meal Type</label>
+            <select name="meal_type" id="id_meal_type"
+                    class="{% if form.meal_type.errors %}error-input{% endif %}">
+                {% for value, label in form.meal_type.field.choices %}
+                <option value="{{ value }}" {% if form.meal_type.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if form.meal_type.errors %}
+            <div class="errors">
+                {% for error in form.meal_type.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="id_notes">Notes</label>
+            <textarea name="notes" id="id_notes" rows="3" placeholder="Optional notes..."
+                      class="{% if form.notes.errors %}error-input{% endif %}">{{ form.notes.value|default:'' }}</textarea>
+            {% if form.notes.errors %}
+            <div class="errors">
+                {% for error in form.notes.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">{{ submit_label }}</button>
+            <a href="{% if meal %}{% url 'meals:meal_detail' pk=meal.id %}{% else %}{% url 'meals:week' %}{% endif %}" class="btn-link" style="text-decoration: none;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

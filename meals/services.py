@@ -30,7 +30,7 @@ def get_meal(meal_id):
     }
 
 
-def create_meal(payload):
+def create_meal(payload, username):
     """Create a new meal. payload should have 'name', 'date', and optionally 'meal_type'."""
     global _next_meal_id
     meal_id = _next_meal_id
@@ -40,6 +40,8 @@ def create_meal(payload):
         "name": payload["name"],
         "date": payload["date"],
         "meal_type": payload.get("meal_type", "dinner"),
+        "notes": payload.get("notes", ""),
+        "created_by_username": username,
     }
     _meals[meal_id] = meal
     return meal
@@ -56,6 +58,8 @@ def update_meal(meal_id, payload):
         meal["date"] = payload["date"]
     if "meal_type" in payload:
         meal["meal_type"] = payload["meal_type"]
+    if "notes" in payload:
+        meal["notes"] = payload["notes"]
     return meal
 
 
@@ -71,7 +75,7 @@ def add_ingredient(meal_id, payload):
         "meal_id": meal_id,
         "name": payload["name"],
         "quantity": payload.get("quantity", ""),
-        "checked": False,
+        "is_on_hand": False,
     }
     _ingredients[ingredient_id] = ingredient
     return ingredient
@@ -82,5 +86,5 @@ def toggle_ingredient(meal_id, ingredient_id):
     ingredient = _ingredients.get(ingredient_id)
     if ingredient is None or ingredient["meal_id"] != meal_id:
         return None
-    ingredient["checked"] = not ingredient["checked"]
+    ingredient["is_on_hand"] = not ingredient["is_on_hand"]
     return ingredient
