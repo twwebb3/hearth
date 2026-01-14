@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Recipes - Meals{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="margin: 0;">Recipes</h1>
+    <a href="{% url 'meals:recipe_create' %}" class="btn-link" style="text-decoration: none;">+ Add Recipe</a>
+</div>
+
+<div class="card" style="margin-bottom: 20px; padding: 12px;">
+    <form method="get" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div>
+            <label for="kind" style="font-size: 13px; color: #6b7280; margin-right: 6px;">Kind:</label>
+            <select name="kind" id="kind" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <option value="">All</option>
+                <option value="MAIN" {% if filter_kind == "MAIN" %}selected{% endif %}>Main</option>
+                <option value="SIDE" {% if filter_kind == "SIDE" %}selected{% endif %}>Side</option>
+            </select>
+        </div>
+        <div>
+            <label for="active" style="font-size: 13px; color: #6b7280; margin-right: 6px;">Status:</label>
+            <select name="active" id="active" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <option value="">All</option>
+                <option value="1" {% if filter_active == "1" %}selected{% endif %}>Active</option>
+                <option value="0" {% if filter_active == "0" %}selected{% endif %}>Inactive</option>
+            </select>
+        </div>
+        {% if filter_kind or filter_active %}
+        <a href="{% url 'meals:recipe_list' %}" style="font-size: 13px; color: #6b7280;">Clear filters</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if recipes %}
+<div class="card">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Name</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Kind</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Status</th>
+                <th style="text-align: right; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for recipe in recipes %}
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">
+                    <span style="{% if not recipe.active %}color: #9ca3af;{% endif %}">{{ recipe.name }}</span>
+                    {% if recipe.notes %}
+                    <div style="font-size: 12px; color: #9ca3af; margin-top: 2px;">{{ recipe.notes|truncatewords:10 }}</div>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px;">
+                    <span style="font-size: 12px; padding: 2px 8px; background: {% if recipe.kind == 'MAIN' %}#dbeafe{% else %}#fef3c7{% endif %}; border-radius: 4px;">{{ recipe.kind }}</span>
+                </td>
+                <td style="padding: 12px;">
+                    {% if recipe.active %}
+                    <span style="color: #059669; font-size: 13px;">Active</span>
+                    {% else %}
+                    <span style="color: #9ca3af; font-size: 13px;">Inactive</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px; text-align: right;">
+                    <a href="{% url 'meals:recipe_edit' pk=recipe.id %}" style="font-size: 13px;">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 40px; color: #6b7280;">
+    <p>No recipes found.</p>
+    <a href="{% url 'meals:recipe_create' %}">Add your first recipe</a>
+</div>
+{% endif %}
+
+<div style="margin-top: 16px;">
+    <a href="{% url 'meals:week' %}">&larr; Back to meal plans</a>
+</div>
+{% endblock %}

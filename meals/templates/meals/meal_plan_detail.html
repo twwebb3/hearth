@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meal_plan.date|date:"M j" }} - Meal Plan{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 16px;">
+    <a href="{% url 'meals:week' %}">&larr; Back to week</a>
+</div>
+
+<div class="card">
+    <h1 style="margin: 0 0 8px 0;">Meal Plan for {{ meal_plan.date|date:"l, F j, Y" }}</h1>
+    <div style="color: #6b7280; margin-bottom: 16px;">
+        <span style="text-transform: uppercase; font-size: 12px; padding: 2px 8px; background: {% if meal_plan.status == 'FINALIZED' %}#d1fae5{% else %}#fef3c7{% endif %}; border-radius: 4px;">{{ meal_plan.status }}</span>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Main</div>
+        <div style="font-size: 18px;">
+            {% if meal_plan.main_recipe %}
+                {{ meal_plan.main_recipe.name }}
+            {% else %}
+                <span style="color: #9ca3af;">Not selected</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Side</div>
+        <div style="font-size: 18px;">
+            {% if meal_plan.side_recipe %}
+                {{ meal_plan.side_recipe.name }}
+            {% else %}
+                <span style="color: #9ca3af;">Not selected</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if meal_plan.notes %}
+    <div style="margin-bottom: 16px; padding: 12px; background: #f9fafb; border-radius: 8px;">
+        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Notes</div>
+        <div>{{ meal_plan.notes|linebreaks }}</div>
+    </div>
+    {% endif %}
+
+    <div style="margin-bottom: 16px; padding: 12px; background: #f9fafb; border-radius: 8px;">
+        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Rating</div>
+        {% if meal_plan.rating %}
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+            <span style="font-size: 24px; font-weight: 600;">{{ meal_plan.rating.rating }}/5</span>
+            {% if meal_plan.rating.would_repeat %}
+            <span style="font-size: 13px; color: #059669;">Would make again</span>
+            {% else %}
+            <span style="font-size: 13px; color: #9ca3af;">Wouldn't repeat</span>
+            {% endif %}
+        </div>
+        {% if meal_plan.rating.comment %}
+        <div style="font-size: 14px; color: #374151;">{{ meal_plan.rating.comment }}</div>
+        {% endif %}
+        <div style="margin-top: 8px;">
+            <a href="{% url 'meals:meal_plan_rate' pk=meal_plan.id %}" style="font-size: 13px;">Update rating</a>
+        </div>
+        {% else %}
+        <div style="color: #9ca3af;">Not rated yet</div>
+        <div style="margin-top: 8px;">
+            <a href="{% url 'meals:meal_plan_rate' pk=meal_plan.id %}" style="font-size: 13px;">Rate this meal</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div style="font-size: 12px; color: #9ca3af;">
+        Created by {{ meal_plan.created_by.username }}
+    </div>
+</div>
+
+<div style="margin-top: 16px; display: flex; gap: 12px;">
+    {% if meal_plan.status == 'FINALIZED' %}
+    <form method="post" action="{% url 'meals:meal_plan_unfinalize' pk=meal_plan.id %}" style="margin: 0;">
+        {% csrf_token %}
+        <button type="submit" class="btn-link">Unfinalize</button>
+    </form>
+    {% else %}
+    <a href="{% url 'meals:meal_plan_edit' pk=meal_plan.id %}" class="btn-link" style="text-decoration: none;">Edit</a>
+    <form method="post" action="{% url 'meals:meal_plan_finalize' pk=meal_plan.id %}" style="margin: 0;">
+        {% csrf_token %}
+        <button type="submit" class="btn-link" style="background: #059669; color: white; border-color: #059669;">Finalize</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

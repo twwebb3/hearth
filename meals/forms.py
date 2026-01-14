@@ -1,35 +1,46 @@
-from datetime import date
-
 from django import forms
 
-
-MEAL_TYPE_CHOICES = [
-    ("breakfast", "Breakfast"),
-    ("lunch", "Lunch"),
-    ("dinner", "Dinner"),
-    ("snack", "Snack"),
-]
+from .models import MealPlan, MealRating, Recipe
 
 
-class MealForm(forms.Form):
-    name = forms.CharField(
-        max_length=200,
-        widget=forms.TextInput(attrs={"placeholder": "Meal name"}),
-    )
-    date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    meal_type = forms.ChoiceField(
-        choices=MEAL_TYPE_CHOICES,
-        initial="dinner",
-    )
-    notes = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Optional notes..."}),
+class MealPlanForm(forms.ModelForm):
+    class Meta:
+        model = MealPlan
+        fields = ["date", "main_recipe", "side_recipe", "notes", "status"]
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "placeholder": "Optional notes..."}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter to only show active recipes of the appropriate kind
+        self.fields["main_recipe"].queryset = Recipe.objects.filter(active=True, kind="MAIN")
+        self.fields["side_recipe"].queryset = Recipe.objects.filter(active=True, kind="SIDE")
+        self.fields["main_recipe"].required = False
+        self.fields["side_recipe"].required = False
+
+
+class RecipeForm(forms.ModelForm):
+    class Meta:
+        model = Recipe
+        fields = ["name", "kind", "notes", "active"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3, "placeholder": "Optional notes..."}),
+        }
+
+
+class MealRatingForm(forms.ModelForm):
+    RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
+
+    rating = forms.ChoiceField(
+        choices=RATING_CHOICES,
+        widget=forms.RadioSelect,
     )
 
-    def clean_date(self):
-        meal_date = self.cleaned_data.get("date")
-        if meal_date and meal_date.year < 2000:
-            raise forms.ValidationError("Please enter a valid date.")
-        return meal_date
+    class Meta:
+        model = MealRating
+        fields = ["rating", "would_repeat", "comment"]
+        widgets = {
+            "comment": forms.Textarea(attrs={"rows": 2, "placeholder": "Optional comment..."}),
+        }

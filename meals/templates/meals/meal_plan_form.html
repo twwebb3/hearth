@@ -64,7 +64,10 @@
 </div>
 
 <div class="card" style="max-width: 500px;">
-    <h1 style="margin: 0 0 20px 0;">{{ title }}</h1>
+    <h1 style="margin: 0 0 8px 0;">{{ title }}</h1>
+    {% if meal_plan %}
+    <p style="color: #6b7280; margin: 0 0 20px 0;">{{ meal_plan.date|date:"l, F j, Y" }}</p>
+    {% endif %}
 
     {% if form.non_field_errors %}
     <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 16px; color: #dc2626;">
@@ -77,18 +80,9 @@
     <form method="post">
         {% csrf_token %}
 
-        <div class="form-group">
-            <label for="id_name">Name</label>
-            <input type="text" name="name" id="id_name" value="{{ form.name.value|default:'' }}"
-                   placeholder="Meal name" required
-                   class="{% if form.name.errors %}error-input{% endif %}">
-            {% if form.name.errors %}
-            <div class="errors">
-                {% for error in form.name.errors %}{{ error }}{% endfor %}
-            </div>
-            {% endif %}
-        </div>
-
+        {% if meal_plan %}
+        <input type="hidden" name="date" value="{{ meal_plan.date|date:'Y-m-d' }}">
+        {% else %}
         <div class="form-group">
             <label for="id_date">Date</label>
             <input type="date" name="date" id="id_date" value="{{ form.date.value|date:'Y-m-d' }}" required
@@ -99,21 +93,41 @@
             </div>
             {% endif %}
         </div>
+        {% endif %}
 
         <div class="form-group">
-            <label for="id_meal_type">Meal Type</label>
-            <select name="meal_type" id="id_meal_type"
-                    class="{% if form.meal_type.errors %}error-input{% endif %}">
-                {% for value, label in form.meal_type.field.choices %}
-                <option value="{{ value }}" {% if form.meal_type.value == value %}selected{% endif %}>{{ label }}</option>
+            <label for="id_main_recipe">Main Recipe</label>
+            <select name="main_recipe" id="id_main_recipe"
+                    class="{% if form.main_recipe.errors %}error-input{% endif %}">
+                <option value="">-- Select a main --</option>
+                {% for recipe in form.main_recipe.field.queryset %}
+                <option value="{{ recipe.id }}" {% if form.main_recipe.value|stringformat:"s" == recipe.id|stringformat:"s" %}selected{% endif %}>{{ recipe.name }}</option>
                 {% endfor %}
             </select>
-            {% if form.meal_type.errors %}
+            {% if form.main_recipe.errors %}
             <div class="errors">
-                {% for error in form.meal_type.errors %}{{ error }}{% endfor %}
+                {% for error in form.main_recipe.errors %}{{ error }}{% endfor %}
             </div>
             {% endif %}
         </div>
+
+        <div class="form-group">
+            <label for="id_side_recipe">Side Recipe</label>
+            <select name="side_recipe" id="id_side_recipe"
+                    class="{% if form.side_recipe.errors %}error-input{% endif %}">
+                <option value="">-- Select a side --</option>
+                {% for recipe in form.side_recipe.field.queryset %}
+                <option value="{{ recipe.id }}" {% if form.side_recipe.value|stringformat:"s" == recipe.id|stringformat:"s" %}selected{% endif %}>{{ recipe.name }}</option>
+                {% endfor %}
+            </select>
+            {% if form.side_recipe.errors %}
+            <div class="errors">
+                {% for error in form.side_recipe.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <input type="hidden" name="status" value="DRAFT">
 
         <div class="form-group">
             <label for="id_notes">Notes</label>
@@ -128,7 +142,10 @@
 
         <div class="form-actions">
             <button type="submit" class="btn-primary">{{ submit_label }}</button>
-            <a href="{% if meal %}{% url 'meals:meal_detail' pk=meal.id %}{% else %}{% url 'meals:week' %}{% endif %}" class="btn-link" style="text-decoration: none;">Cancel</a>
+            {% if meal_plan %}
+            <button type="submit" name="finalize" value="1" class="btn-link" style="background: #059669; color: white; border-color: #059669;">Save & Finalize</button>
+            {% endif %}
+            <a href="{% url 'meals:week' %}" class="btn-link" style="text-decoration: none;">Cancel</a>
         </div>
     </form>
 </div>

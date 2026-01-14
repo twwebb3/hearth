@@ -3,27 +3,46 @@
 {% block title %}Meals - Week of {{ start_date|date:"M j" }}{% endblock %}
 
 {% block content %}
-<h1>Meal Plan</h1>
-<p>{{ start_date|date:"F j" }} &ndash; {{ end_date|date:"F j, Y" }}</p>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h1 style="margin: 0;">Meal Plan</h1>
+    <div style="display: flex; gap: 8px;">
+        <a href="{% url 'meals:ratings_history' %}" class="btn-link" style="text-decoration: none;">Ratings History</a>
+        <a href="{% url 'meals:recipe_list' %}" class="btn-link" style="text-decoration: none;">Manage Recipes</a>
+    </div>
+</div>
+<p style="margin-top: 0;">{{ start_date|date:"F j" }} &ndash; {{ end_date|date:"F j, Y" }}</p>
 
 <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin-top: 20px;">
     {% for day in days %}
     <div class="card">
-        <div style="font-weight: 600; margin-bottom: 8px;">
+        <div style="font-weight: 600; margin-bottom: 10px;">
             {{ day.date|date:"l" }}<br>
             <span style="font-weight: 400; color: #6b7280;">{{ day.date|date:"M j" }}</span>
         </div>
-        {% if day.meals %}
-            {% for meal in day.meals %}
-            <div style="margin-bottom: 6px;">
-                <a href="{% url 'meals:meal_detail' pk=meal.id %}">{{ meal.name }}</a>
-                <span style="color: #9ca3af; font-size: 12px;">{{ meal.meal_type }}</span>
+        {% if day.meal_plan %}
+            <div style="margin-bottom: 8px;">
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 2px;">Main</div>
+                {% if day.meal_plan.main_recipe %}
+                    <a href="{% url 'meals:meal_plan_detail' pk=day.meal_plan.id %}">{{ day.meal_plan.main_recipe.name }}</a>
+                {% else %}
+                    <a href="{% url 'meals:meal_plan_edit' pk=day.meal_plan.id %}" style="color: #9ca3af; font-style: italic;">Select main</a>
+                {% endif %}
             </div>
-            {% endfor %}
+            <div style="margin-bottom: 10px;">
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 2px;">Side</div>
+                {% if day.meal_plan.side_recipe %}
+                    <span>{{ day.meal_plan.side_recipe.name }}</span>
+                {% else %}
+                    <a href="{% url 'meals:meal_plan_edit' pk=day.meal_plan.id %}" style="color: #9ca3af; font-style: italic;">Select side</a>
+                {% endif %}
+            </div>
+            <div>
+                <span style="font-size: 11px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; {% if day.meal_plan.status == 'FINALIZED' %}background: #d1fae5; color: #065f46;{% else %}background: #fef3c7; color: #92400e;{% endif %}">{{ day.meal_plan.status }}</span>
+            </div>
         {% else %}
-            <div style="color: #9ca3af; font-size: 14px;">No meals</div>
+            <div style="color: #9ca3af; font-size: 14px; margin-bottom: 8px;">No plan</div>
+            <a href="{% url 'meals:meal_plan_pick' date_str=day.date|date:'Y-m-d' %}" style="font-size: 13px;">Pick main/side</a>
         {% endif %}
-        <a href="{% url 'meals:meal_create' %}?date={{ day.date|date:'Y-m-d' }}" style="font-size: 13px; color: #6b7280;">+ Add meal</a>
     </div>
     {% endfor %}
 </div>

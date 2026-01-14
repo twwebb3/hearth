@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Ratings History - Meals{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="margin: 0;">Ratings History</h1>
+    <a href="{% url 'meals:week' %}" class="btn-link" style="text-decoration: none;">&larr; Back to week</a>
+</div>
+
+<div class="card" style="margin-bottom: 20px; padding: 12px;">
+    <form method="get" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div>
+            <label for="rating" style="font-size: 13px; color: #6b7280; margin-right: 6px;">Rating:</label>
+            <select name="rating" id="rating" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <option value="">All</option>
+                {% for i in "12345" %}
+                <option value="{{ i }}" {% if filter_rating == i %}selected{% endif %}>{{ i }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="would_repeat" style="font-size: 13px; color: #6b7280; margin-right: 6px;">Would repeat:</label>
+            <select name="would_repeat" id="would_repeat" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <option value="">All</option>
+                <option value="1" {% if filter_would_repeat == "1" %}selected{% endif %}>Yes</option>
+                <option value="0" {% if filter_would_repeat == "0" %}selected{% endif %}>No</option>
+            </select>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+            <label for="recipe" style="font-size: 13px; color: #6b7280; margin-right: 6px;">Recipe:</label>
+            <input type="text" name="recipe" id="recipe" value="{{ filter_recipe }}" placeholder="Search recipe..." style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; width: 150px;">
+        </div>
+        <button type="submit" class="btn-link" style="padding: 6px 12px;">Search</button>
+        {% if filter_rating or filter_would_repeat or filter_recipe %}
+        <a href="{% url 'meals:ratings_history' %}" style="font-size: 13px; color: #6b7280;">Clear filters</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if meal_plans %}
+<div class="card">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Date</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Recipes</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Rating</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Repeat?</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mp in meal_plans %}
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">
+                    <a href="{% url 'meals:meal_plan_detail' pk=mp.id %}">{{ mp.date|date:"M j, Y" }}</a>
+                    <div style="font-size: 12px; color: #9ca3af;">{{ mp.date|date:"l" }}</div>
+                </td>
+                <td style="padding: 12px;">
+                    {% if mp.main_recipe %}
+                    <div>{{ mp.main_recipe.name }}</div>
+                    {% endif %}
+                    {% if mp.side_recipe %}
+                    <div style="font-size: 13px; color: #6b7280;">+ {{ mp.side_recipe.name }}</div>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    <span style="font-size: 18px; font-weight: 600; {% if mp.rating.rating >= 4 %}color: #059669;{% elif mp.rating.rating <= 2 %}color: #dc2626;{% else %}color: #d97706;{% endif %}">{{ mp.rating.rating }}</span>
+                    <span style="color: #9ca3af;">/5</span>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    {% if mp.rating.would_repeat %}
+                    <span style="color: #059669;">Yes</span>
+                    {% else %}
+                    <span style="color: #9ca3af;">No</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px; font-size: 13px; color: #6b7280; max-width: 200px;">
+                    {{ mp.rating.comment|truncatewords:15|default:"-" }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div style="margin-top: 16px; color: #6b7280; font-size: 13px;">
+    Showing {{ meal_plans|length }} rated meal{{ meal_plans|length|pluralize }}
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 40px; color: #6b7280;">
+    <p>No rated meals found.</p>
+    {% if filter_rating or filter_would_repeat or filter_recipe %}
+    <a href="{% url 'meals:ratings_history' %}">Clear filters</a>
+    {% else %}
+    <p style="font-size: 14px;">Finalize and rate some meals to see them here.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
