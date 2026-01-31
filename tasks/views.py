@@ -7,25 +7,21 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import Domain, Project, Task, TaskExecution, TaskInstance, TaskScheduleRule
+from .services import generate_instances_for_date, rollover_incomplete
 
 
 def index(request):
     return render(request, "tasks/index.html")
 
 
-def today(request):
-    today_date = timezone.localdate()
-    instances = (
+def _instances_for_date(target_date):
+    """Return today's instances annotated with dot_color, split into
+    (incomplete, completed) querysets."""
+    base = (
         TaskInstance.objects
-        .filter(instance_date=today_date)
+        .filter(instance_date=target_date)
         .select_related("task__project__domain", "task__domain")
         .annotate(
-            status_rank=Case(
-                When(status="incomplete", then=Value(0)),
-                When(status="complete", then=Value(1)),
-                When(status="skipped", then=Value(2)),
-                default=Value(3),
-            ),
             dot_color=Coalesce(
                 Case(
                     When(task__project__color_hex="", then=None),
@@ -35,16 +31,64 @@ def today(request):
                 "task__domain__color_hex",
             ),
         )
-        .order_by(
-            "status_rank",
-            "assigned_order",
-            "task__priority",
-            "completion_order",
-        )
     )
+    incomplete = (
+        base
+        .filter(status=TaskInstance.Status.INCOMPLETE)
+        .order_by("assigned_order", "task__priority")
+    )
+    completed = (
+        base
+        .filter(status__in=[TaskInstance.Status.COMPLETE, TaskInstance.Status.SKIPPED])
+        .annotate(
+            status_rank=Case(
+                When(status="complete", then=Value(0)),
+                When(status="skipped", then=Value(1)),
+                default=Value(2),
+            ),
+        )
+        .order_by("status_rank", "completion_order")
+    )
+    return incomplete, completed
+
+
+def _next_assigned_order(target_date):
+    max_order = (
+        TaskInstance.objects
+        .filter(instance_date=target_date)
+        .aggregate(m=Max("assigned_order"))["m"]
+    )
+    return (max_order if max_order is not None else -1) + 1
+
+
+def today(request):
+    today_date = timezone.localdate()
+    yesterday = today_date - datetime.timedelta(days=1)
+
+    # Ensure scheduled + rolled-over instances exist (idempotent).
+    generate_instances_for_date(today_date)
+    rollover_incomplete(yesterday, today_date)
+
+    incomplete, completed = _instances_for_date(today_date)
+
+    # Tasks not already on today's list, for the "add existing" dropdown.
+    already_on_today = TaskInstance.objects.filter(
+        instance_date=today_date,
+    ).values_list("task_id", flat=True)
+    available_tasks = (
+        Task.objects
+        .filter(is_active=True)
+        .exclude(pk__in=already_on_today)
+        .select_related("project__domain", "domain")
+        .order_by("name")
+    )
+
     return render(request, "tasks/today.html", {
         "date": today_date,
-        "instances": instances,
+        "incomplete": incomplete,
+        "completed": completed,
+        "available_tasks": available_tasks,
+        "domains": Domain.objects.all(),
     })
 
 
@@ -59,6 +103,35 @@ def today_assign(request):
         task=task,
         instance_date=timezone.localdate(),
         defaults=defaults,
+    )
+    return redirect("tasks:today")
+
+
+@require_POST
+def today_add(request):
+    today_date = timezone.localdate()
+    task_id = request.POST.get("task_id", "").strip()
+    new_name = request.POST.get("new_name", "").strip()
+    domain_id = request.POST.get("domain_id", "").strip()
+
+    if task_id:
+        # Existing task
+        task = get_object_or_404(Task, pk=task_id)
+    elif new_name and domain_id:
+        # Create a new task under the chosen domain
+        domain = get_object_or_404(Domain, pk=domain_id)
+        task = Task.objects.create(name=new_name, domain=domain)
+    else:
+        return redirect("tasks:today")
+
+    next_order = _next_assigned_order(today_date)
+    TaskInstance.objects.get_or_create(
+        task=task,
+        instance_date=today_date,
+        defaults={
+            "source": TaskInstance.Source.MANUAL,
+            "assigned_order": next_order,
+        },
     )
     return redirect("tasks:today")
 
@@ -100,6 +173,37 @@ def today_uncomplete(request):
     TaskExecution.objects.create(
         task_instance=instance,
         event_type=TaskExecution.EventType.UNCOMPLETED,
+        performed_by=request.user if request.user.is_authenticated else None,
+    )
+    return redirect("tasks:today")
+
+
+@require_POST
+def toggle_complete(request, pk):
+    instance = get_object_or_404(TaskInstance, pk=pk)
+    if instance.status == TaskInstance.Status.INCOMPLETE:
+        max_order = (
+            TaskInstance.objects
+            .filter(instance_date=instance.instance_date, status=TaskInstance.Status.COMPLETE)
+            .aggregate(m=Max("completion_order"))["m"]
+        )
+        instance.status = TaskInstance.Status.COMPLETE
+        instance.completion_order = (max_order or 0) + 1
+        instance.completed_at = timezone.now()
+        instance.skipped_at = None
+        event_type = TaskExecution.EventType.COMPLETED
+    else:
+        instance.status = TaskInstance.Status.INCOMPLETE
+        instance.completion_order = None
+        instance.completed_at = None
+        instance.skipped_at = None
+        event_type = TaskExecution.EventType.UNCOMPLETED
+    instance.save(update_fields=[
+        "status", "completion_order", "completed_at", "skipped_at", "updated_at",
+    ])
+    TaskExecution.objects.create(
+        task_instance=instance,
+        event_type=event_type,
         performed_by=request.user if request.user.is_authenticated else None,
     )
     return redirect("tasks:today")

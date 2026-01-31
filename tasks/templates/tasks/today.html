@@ -6,44 +6,106 @@
 {% include "tasks/_subnav.html" with page_title="Today" %}
 <p style="margin-top: 0; color: #6b7280;">{{ date|date:"l, F j, Y" }}</p>
 
-{% if instances %}
-<div style="display: flex; flex-direction: column; gap: 6px;">
-  {% for inst in instances %}
-  <div class="card" style="display: flex; align-items: center; gap: 10px;{% if inst.status != 'incomplete' %} opacity: 0.55;{% endif %}">
-    <span style="
-      display: inline-block;
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: {{ inst.dot_color }};
-    "></span>
-    <div style="flex: 1; min-width: 0;">
-      <div style="font-weight: 600;{% if inst.status == 'complete' %} text-decoration: line-through;{% endif %}">
-        {{ inst.task.name }}
+{# ── Add task to today ── #}
+<div class="card" style="margin-bottom: 20px;">
+  <details>
+    <summary style="cursor: pointer; font-weight: 600; font-size: 14px; user-select: none;">Add task to today</summary>
+    <form method="post" action="{% url 'tasks:today_add' %}" style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+      {% csrf_token %}
+
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
+        Pick an existing task
+        <select name="task_id" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+          <option value="">-- select --</option>
+          {% for t in available_tasks %}
+          <option value="{{ t.pk }}">{{ t.name }} ({% if t.project %}{{ t.project.domain.name }} &rsaquo; {{ t.project.name }}{% else %}{{ t.domain.name }}{% endif %})</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div style="text-align: center; font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px;">or create new</div>
+
+      <div style="display: flex; gap: 8px;">
+        <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
+          Task name
+          <input type="text" name="new_name" placeholder="e.g. Fix leaky faucet" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
+          Domain
+          <select name="domain_id" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+            <option value="">-- domain --</option>
+            {% for d in domains %}
+            <option value="{{ d.pk }}">{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
       </div>
+
+      <button type="submit" class="btn-link" style="font-weight: 600; align-self: flex-start;">Add</button>
+    </form>
+  </details>
+</div>
+
+{# ── Incomplete ── #}
+<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">
+  Incomplete{% if incomplete %} ({{ incomplete|length }}){% endif %}
+</h2>
+
+{% if incomplete %}
+<div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px;">
+  {% for inst in incomplete %}
+  <div class="card" style="display: flex; align-items: center; gap: 10px;">
+    <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: {{ inst.dot_color }};"></span>
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-weight: 600;">{{ inst.task.name }}</div>
+      <div style="font-size: 13px; color: #6b7280;">
+        {% if inst.task.project %}{{ inst.task.project.domain.name }} &middot; {{ inst.task.project.name }}{% else %}{{ inst.task.domain.name }}{% endif %}
+        {% if inst.source == 'rolled_over' %}<span style="font-size: 11px; background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 4px; margin-left: 4px;">rolled over</span>{% endif %}
+      </div>
+    </div>
+    <form method="post" action="{% url 'tasks:toggle_complete' pk=inst.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-link" style="font-size: 13px;">Complete</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; color: #6b7280; padding: 24px; margin-bottom: 24px;">
+  All done for today.
+</div>
+{% endif %}
+
+{# ── Completed ── #}
+<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">
+  Completed{% if completed %} ({{ completed|length }}){% endif %}
+</h2>
+
+{% if completed %}
+<div style="display: flex; flex-direction: column; gap: 6px;">
+  {% for inst in completed %}
+  <div class="card" style="display: flex; align-items: center; gap: 10px; opacity: 0.55;">
+    <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: {{ inst.dot_color }};"></span>
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-weight: 600; text-decoration: line-through;">{{ inst.task.name }}</div>
       <div style="font-size: 13px; color: #6b7280;">
         {% if inst.task.project %}{{ inst.task.project.domain.name }} &middot; {{ inst.task.project.name }}{% else %}{{ inst.task.domain.name }}{% endif %}
       </div>
     </div>
     <span style="
-      font-size: 11px;
-      text-transform: uppercase;
-      padding: 2px 8px;
-      border-radius: 6px;
-      {% if inst.status == 'complete' %}
-        background: #d1fae5; color: #065f46;
-      {% elif inst.status == 'skipped' %}
-        background: #e5e7eb; color: #374151;
-      {% else %}
-        background: #fef3c7; color: #92400e;
-      {% endif %}
+      font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 6px;
+      {% if inst.status == 'complete' %}background: #d1fae5; color: #065f46;{% else %}background: #e5e7eb; color: #374151;{% endif %}
     ">{{ inst.status }}</span>
+    <form method="post" action="{% url 'tasks:toggle_complete' pk=inst.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-link" style="font-size: 13px;">Undo</button>
+    </form>
   </div>
   {% endfor %}
 </div>
 {% else %}
-<div class="card" style="text-align: center; color: #6b7280; padding: 32px;">
-  No tasks for today.
+<div class="card" style="text-align: center; color: #6b7280; padding: 24px;">
+  Nothing completed yet.
 </div>
 {% endif %}
 {% endblock %}
