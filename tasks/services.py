@@ -33,6 +33,7 @@ def generate_instances_for_date(target_date):
     rules = (
         TaskScheduleRule.objects
         .filter(
+            is_active=True,
             task__is_active=True,
             start_date__lte=target_date,
         )

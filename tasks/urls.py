@@ -24,6 +24,7 @@ urlpatterns = [
     path("tasks/<int:task_id>/deactivate/", views.task_deactivate, name="task_deactivate"),
     path("tasks/<int:task_id>/add-to-today/", views.task_add_to_today, name="task_add_to_today"),
     path("tasks/<int:task_id>/schedule/", views.schedule_edit, name="schedule_edit"),
+    path("tasks/<int:task_id>/schedule/toggle-pause/", views.schedule_toggle_pause, name="schedule_toggle_pause"),
     path("tasks/<int:task_id>/schedule/delete/", views.schedule_delete, name="schedule_delete"),
     path("analytics/", views.analytics, name="analytics"),
 ]

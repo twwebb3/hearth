@@ -1,6 +1,8 @@
 import datetime
+import statistics
+from collections import defaultdict
 
-from django.db.models import Case, Count, Max, Q, Value, When
+from django.db.models import Avg, Case, Count, F, Max, Q, Value, When
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -254,15 +256,60 @@ def reorder(request, pk):
     return redirect("tasks:today")
 
 
+_ALL_DAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+_DAY_LABELS = [
+    ("MO", "Mon"), ("TU", "Tue"), ("WE", "Wed"), ("TH", "Thu"),
+    ("FR", "Fri"), ("SA", "Sat"), ("SU", "Sun"),
+]
+_WEEKDAY_SET = {"MO", "TU", "WE", "TH", "FR"}
+_WEEKEND_SET = {"SA", "SU"}
+
+
+def _parse_rrule_to_ui(rrule_text):
+    """Return (pattern, selected_days) for the schedule form."""
+    if not rrule_text:
+        return "daily", []
+    upper = rrule_text.upper()
+    if upper == "FREQ=DAILY":
+        return "daily", []
+    byday = []
+    for part in upper.split(";"):
+        if part.startswith("BYDAY="):
+            byday = [d.strip() for d in part[6:].split(",") if d.strip()]
+    if not byday:
+        return "daily", []
+    byday_set = set(byday)
+    if byday_set == _WEEKDAY_SET:
+        return "weekdays", list(_WEEKDAY_SET)
+    if byday_set == _WEEKEND_SET:
+        return "weekends", list(_WEEKEND_SET)
+    return "custom", byday
+
+
+def _build_rrule_from_ui(pattern, days):
+    """Return an RRULE string from form selections."""
+    if pattern == "weekdays":
+        return "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+    if pattern == "weekends":
+        return "FREQ=WEEKLY;BYDAY=SA,SU"
+    if pattern == "custom" and days:
+        ordered = [d for d in _ALL_DAYS if d in days]
+        return "FREQ=WEEKLY;BYDAY=" + ",".join(ordered)
+    return "FREQ=DAILY"
+
+
 def schedule_edit(request, task_id):
     task = get_object_or_404(Task, pk=task_id)
     rule = getattr(task, "schedule_rule", None)
 
     if request.method == "POST":
-        rrule = request.POST.get("rrule", "").strip()
+        pattern = request.POST.get("pattern", "daily")
+        days = request.POST.getlist("days")
         start_date = request.POST.get("start_date", "").strip()
         end_date = request.POST.get("end_date", "").strip() or None
         tz = request.POST.get("timezone", "").strip() or "America/New_York"
+
+        rrule = _build_rrule_from_ui(pattern, days)
 
         if rule:
             rule.rrule = rrule
@@ -278,19 +325,40 @@ def schedule_edit(request, task_id):
                 end_date=end_date,
                 timezone=tz,
             )
-        return redirect("tasks:task_list")
+        return redirect("tasks:task_detail", task_id=task_id)
+
+    pattern, selected_days = _parse_rrule_to_ui(rule.rrule if rule else "")
+
+    pattern_choices = [
+        ("daily", "Every day"),
+        ("weekdays", "Weekdays (Mon\u2013Fri)"),
+        ("weekends", "Weekends (Sat\u2013Sun)"),
+        ("custom", "Select days\u2026"),
+    ]
 
     return render(request, "tasks/schedule_form.html", {
         "task": task,
         "rule": rule,
+        "pattern": pattern,
+        "pattern_choices": pattern_choices,
+        "selected_days": selected_days,
+        "day_labels": _DAY_LABELS,
     })
+
+
+@require_POST
+def schedule_toggle_pause(request, task_id):
+    rule = get_object_or_404(TaskScheduleRule, task_id=task_id)
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=["is_active", "updated_at"])
+    return redirect("tasks:task_detail", task_id=task_id)
 
 
 @require_POST
 def schedule_delete(request, task_id):
     task = get_object_or_404(Task, pk=task_id)
     TaskScheduleRule.objects.filter(task=task).delete()
-    return redirect("tasks:task_list")
+    return redirect("tasks:task_detail", task_id=task_id)
 
 
 def domains(request):
@@ -342,6 +410,7 @@ def domain_detail(request, pk):
     domain_tasks = (
         Task.objects
         .filter(domain=domain, is_active=True)
+        .select_related("schedule_rule")
         .order_by("priority", "sort_order", "name")
     )
 
@@ -393,6 +462,7 @@ def project_detail(request, pk):
     tasks = (
         Task.objects
         .filter(project=project, is_active=True)
+        .select_related("schedule_rule")
         .order_by("priority", "sort_order", "name")
     )
 
@@ -515,32 +585,8 @@ def _parse_date(value, fallback):
     return fallback
 
 
-def analytics(request):
-    today_date = timezone.localdate()
-    start = _parse_date(request.GET.get("start"), today_date - datetime.timedelta(days=30))
-    end = _parse_date(request.GET.get("end"), today_date)
-
-    date_filter = Q(
-        instances__instance_date__gte=start,
-        instances__instance_date__lte=end,
-    )
-    complete_q = Q(instances__status="complete") & Q(
-        instances__instance_date__gte=start,
-        instances__instance_date__lte=end,
-    )
-    incomplete_q = Q(instances__status="incomplete") & Q(
-        instances__instance_date__gte=start,
-        instances__instance_date__lte=end,
-    )
-    skipped_q = Q(instances__status="skipped") & Q(
-        instances__instance_date__gte=start,
-        instances__instance_date__lte=end,
-    )
-
-    # --- 1. Completion by domain ---
-    # Instances reach a domain via two paths:
-    #   projects__tasks__instances  (task under a project)
-    #   tasks__instances            (task directly under domain)
+def _domain_rates_for_window(start, end):
+    """Return {domain_pk: {total, completed}} for a date window."""
     date_via_project = Q(
         projects__tasks__instances__instance_date__gte=start,
         projects__tasks__instances__instance_date__lte=end,
@@ -550,45 +596,155 @@ def analytics(request):
         tasks__instances__instance_date__lte=end,
     )
 
-    def _domain_count(extra_q=Q()):
-        """Count distinct instances for a domain across both paths."""
+    def _count(extra_q=Q()):
         return (
-            Count(
-                "projects__tasks__instances",
-                filter=date_via_project & extra_q,
-            )
-            + Count(
-                "tasks__instances",
-                filter=date_via_direct & extra_q,
-            )
+            Count("projects__tasks__instances", filter=date_via_project & extra_q)
+            + Count("tasks__instances", filter=date_via_direct & extra_q)
         )
 
-    by_domain = (
-        Domain.objects
-        .filter(date_via_project | date_via_direct)
-        .annotate(
-            total=_domain_count(),
-            completed=_domain_count(Q(
-                projects__tasks__instances__status="complete",
-            ) | Q(
-                tasks__instances__status="complete",
-            )),
-            incomplete=_domain_count(Q(
-                projects__tasks__instances__status="incomplete",
-            ) | Q(
-                tasks__instances__status="incomplete",
-            )),
-            skipped=_domain_count(Q(
-                projects__tasks__instances__status="skipped",
-            ) | Q(
-                tasks__instances__status="skipped",
-            )),
+    return {
+        d.pk: {"total": d.total, "completed": d.completed}
+        for d in (
+            Domain.objects
+            .filter(date_via_project | date_via_direct)
+            .annotate(
+                total=_count(),
+                completed=_count(
+                    Q(projects__tasks__instances__status="complete")
+                    | Q(tasks__instances__status="complete")
+                ),
+            )
+            .filter(total__gt=0)
         )
-        .filter(total__gt=0)
-        .order_by("-completed", "name")
+    }
+
+
+def analytics(request):
+    today_date = timezone.localdate()
+    start = _parse_date(request.GET.get("start"), today_date - datetime.timedelta(days=30))
+    end = _parse_date(request.GET.get("end"), today_date)
+
+    # --- 1. Domain completion rates across 7 / 14 / 30 day windows ---
+    windows = [
+        ("7d", 7),
+        ("14d", 14),
+        ("30d", 30),
+    ]
+    window_rates = {}
+    all_domain_pks = set()
+    for label, days in windows:
+        w_start = today_date - datetime.timedelta(days=days)
+        rates = _domain_rates_for_window(w_start, today_date)
+        window_rates[label] = rates
+        all_domain_pks |= rates.keys()
+
+    domains_by_pk = {
+        d.pk: d
+        for d in Domain.objects.filter(pk__in=all_domain_pks)
+    }
+
+    domain_rows = []
+    for pk in all_domain_pks:
+        row = {"domain": domains_by_pk[pk]}
+        for label, _ in windows:
+            r = window_rates[label].get(pk, {"total": 0, "completed": 0})
+            total = r["total"]
+            completed = r["completed"]
+            row[f"total_{label}"] = total
+            row[f"completed_{label}"] = completed
+            row[f"rate_{label}"] = round(completed / total * 100) if total else 0
+        domain_rows.append(row)
+
+    domain_rows.sort(key=lambda r: r["rate_30d"], reverse=True)
+
+    # --- 1b. Activity timeline (rolling 30 days) ---
+    start_30 = today_date - datetime.timedelta(days=30)
+
+    completion_rows = (
+        TaskInstance.objects
+        .filter(
+            status=TaskInstance.Status.COMPLETE,
+            completed_at__isnull=False,
+            instance_date__gte=start_30,
+            instance_date__lte=today_date,
+        )
+        .values_list("instance_date", "completed_at")
     )
 
-    # --- 2. Completion by project ---
+    by_date = defaultdict(list)
+    all_minutes = []
+    for inst_date, completed_at in completion_rows:
+        local_dt = timezone.localtime(completed_at)
+        mins = local_dt.hour * 60 + local_dt.minute
+        by_date[inst_date].append(mins)
+        all_minutes.append(mins)
+
+    timeline = []
+    for day_offset in range(31):
+        d = start_30 + datetime.timedelta(days=day_offset)
+        mins_list = by_date.get(d, [])
+        count = len(mins_list)
+        if mins_list:
+            med = statistics.median(mins_list)
+            median_time = f"{int(med) // 60:02d}:{int(med) % 60:02d}"
+        else:
+            median_time = None
+        timeline.append({"date": d, "count": count, "median_time": median_time})
+
+    max_timeline = max((r["count"] for r in timeline), default=0)
+    for r in timeline:
+        r["bar_pct"] = round(r["count"] / max_timeline * 100) if max_timeline else 0
+
+    total_completions = sum(r["count"] for r in timeline)
+    days_with = sum(1 for r in timeline if r["count"])
+    avg_per_day = round(total_completions / days_with, 1) if days_with else 0
+    if all_minutes:
+        overall_med = statistics.median(all_minutes)
+        overall_median_time = f"{int(overall_med) // 60:02d}:{int(overall_med) % 60:02d}"
+    else:
+        overall_median_time = None
+
+    # --- 2. Task consistency (rolling 30 days) ---
+    date_q = Q(
+        instances__instance_date__gte=start_30,
+        instances__instance_date__lte=today_date,
+    )
+
+    task_consistency = list(
+        Task.objects
+        .filter(is_active=True)
+        .annotate(
+            total_count=Count("instances", filter=date_q),
+            completed_count=Count(
+                "instances",
+                filter=date_q & Q(instances__status="complete"),
+            ),
+            avg_completion_order=Avg(
+                "instances__completion_order",
+                filter=date_q & Q(instances__status="complete"),
+            ),
+        )
+        .filter(total_count__gte=3)
+        .select_related("project__domain", "domain")
+    )
+
+    for t in task_consistency:
+        t.rate = round(t.completed_count / t.total_count * 100)
+        t.avg_order_display = (
+            round(t.avg_completion_order, 1)
+            if t.avg_completion_order is not None else None
+        )
+
+    consistently_completed = sorted(
+        [t for t in task_consistency if t.rate >= 80],
+        key=lambda t: (-t.rate, t.name),
+    )
+    consistently_incomplete = sorted(
+        [t for t in task_consistency if t.rate <= 50],
+        key=lambda t: (t.rate, t.name),
+    )
+
+    # --- 3. Completion by project (custom date range) ---
     by_project = (
         Project.objects
         .filter(tasks__instances__instance_date__gte=start,
@@ -631,7 +787,7 @@ def analytics(request):
         .order_by("-completed", "name")
     )
 
-    # --- 3. Chronic incompletion (appearances >= 5, still incomplete) ---
+    # --- 3. Chronic incompletion (custom date range) ---
     chronic = (
         Task.objects
         .annotate(
@@ -656,10 +812,61 @@ def analytics(request):
         .order_by("-incomplete_count")
     )
 
+    # --- 5. Overdue aging ---
+    overdue_instances = list(
+        TaskInstance.objects
+        .filter(
+            task__due_date__isnull=False,
+            status=TaskInstance.Status.INCOMPLETE,
+        )
+        .filter(instance_date__gt=F("task__due_date"))
+        .select_related("task__project__domain", "task__domain")
+        .order_by("task__due_date", "-instance_date")
+    )
+
+    for inst in overdue_instances:
+        inst.days_overdue = (inst.instance_date - inst.task.due_date).days
+
+    # Deduplicated list: one row per task, keeping the most-overdue instance.
+    seen_tasks = set()
+    overdue_list = []
+    for inst in sorted(overdue_instances, key=lambda i: -i.days_overdue):
+        if inst.task_id not in seen_tasks:
+            seen_tasks.add(inst.task_id)
+            overdue_list.append(inst)
+
+    # Histogram buckets.
+    aging_buckets = [
+        ("1\u20133 days", 1, 3),
+        ("4\u20137 days", 4, 7),
+        ("8\u201314 days", 8, 14),
+        ("15\u201330 days", 15, 30),
+        ("30+ days", 31, None),
+    ]
+    histogram = []
+    for label, lo, hi in aging_buckets:
+        count = sum(
+            1 for inst in overdue_instances
+            if inst.days_overdue >= lo and (hi is None or inst.days_overdue <= hi)
+        )
+        histogram.append({"label": label, "count": count})
+
+    max_bucket = max((b["count"] for b in histogram), default=0)
+    for b in histogram:
+        b["bar_pct"] = round(b["count"] / max_bucket * 100) if max_bucket else 0
+
     return render(request, "tasks/analytics.html", {
         "start": start,
         "end": end,
-        "by_domain": by_domain,
+        "domain_rows": domain_rows,
+        "timeline": timeline,
+        "total_completions": total_completions,
+        "avg_per_day": avg_per_day,
+        "overall_median_time": overall_median_time,
+        "consistently_completed": consistently_completed,
+        "consistently_incomplete": consistently_incomplete,
         "by_project": by_project,
         "chronic": chronic,
+        "overdue_list": overdue_list,
+        "histogram": histogram,
     })

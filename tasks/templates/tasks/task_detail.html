@@ -33,6 +33,10 @@
 <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
   <a href="{% url 'tasks:schedule_edit' task_id=task.pk %}" class="btn-link" style="text-decoration: none;">{% if rule %}Edit schedule{% else %}Add schedule{% endif %}</a>
   {% if rule %}
+  <form method="post" action="{% url 'tasks:schedule_toggle_pause' task_id=task.pk %}" style="margin: 0;">
+    {% csrf_token %}
+    <button type="submit" class="btn-link">{% if rule.is_active %}Pause schedule{% else %}Resume schedule{% endif %}</button>
+  </form>
   <form method="post" action="{% url 'tasks:schedule_delete' task_id=task.pk %}" style="margin: 0;">
     {% csrf_token %}
     <button type="submit" class="btn-link" style="color: #dc2626;">Remove schedule</button>
@@ -56,8 +60,11 @@
 
 {# ── Schedule rule ── #}
 {% if rule %}
-<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">Schedule</h2>
-<div class="card" style="margin-bottom: 20px; font-size: 13px;">
+<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">
+  Schedule
+  {% if not rule.is_active %}<span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #fef3c7; color: #92400e; text-transform: none; letter-spacing: 0;">paused</span>{% endif %}
+</h2>
+<div class="card" style="margin-bottom: 20px; font-size: 13px; {% if not rule.is_active %}opacity: 0.55;{% endif %}">
   <div style="display: flex; gap: 16px; flex-wrap: wrap; color: #374151;">
     <span>RRULE: <code style="background: #f3f4f6; padding: 1px 6px; border-radius: 4px;">{{ rule.rrule }}</code></span>
     <span>Start: <strong>{{ rule.start_date|date:"M j, Y" }}</strong></span>

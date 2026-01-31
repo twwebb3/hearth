@@ -6,17 +6,42 @@
 {% include "tasks/_subnav.html" with page_title="Schedule" %}
 <p style="color: #6b7280;">Task: <strong>{{ task.name }}</strong> &mdash; {% if rule %}Edit{% else %}Add{% endif %} schedule</p>
 
-<form method="post" class="card" style="display: flex; flex-direction: column; gap: 12px; max-width: 480px;">
+<form method="post" class="card" style="display: flex; flex-direction: column; gap: 14px; max-width: 480px;">
   {% csrf_token %}
 
-  <label style="display: flex; flex-direction: column; gap: 4px;">
-    <span style="font-weight: 600; font-size: 14px;">RRULE</span>
-    <input type="text" name="rrule" required
-           value="{{ rule.rrule|default:'' }}"
-           placeholder="FREQ=DAILY or FREQ=WEEKLY;BYDAY=MO,WE,FR"
-           style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
-    <span style="font-size: 12px; color: #6b7280;">Examples: FREQ=DAILY &nbsp; FREQ=WEEKLY;BYDAY=MO,WE,FR</span>
-  </label>
+  {# ── Pattern radio buttons ── #}
+  <fieldset style="border: none; padding: 0; margin: 0;">
+    <legend style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">Frequency</legend>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      {% for value, label in pattern_choices %}
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer;">
+        <input type="radio" name="pattern" value="{{ value }}"
+               {% if value == pattern %}checked{% endif %}
+               onchange="toggleDays()">
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  {# ── Day checkboxes (visible when pattern == custom) ── #}
+  <fieldset id="day-picker" style="border: none; padding: 0; margin: 0; {% if pattern != 'custom' %}display: none;{% endif %}">
+    <legend style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">Select days</legend>
+    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+      {% for code, label in day_labels %}
+      <label style="display: flex; align-items: center; justify-content: center; width: 48px; height: 36px;
+                    border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; cursor: pointer; user-select: none;
+                    transition: background 0.1s;"
+             id="day-label-{{ code }}">
+        <input type="checkbox" name="days" value="{{ code }}"
+               {% if code in selected_days %}checked{% endif %}
+               style="display: none;"
+               onchange="styleDayLabel(this, '{{ code }}')">
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
 
   <label style="display: flex; flex-direction: column; gap: 4px;">
     <span style="font-weight: 600; font-size: 14px;">Start date</span>
@@ -39,15 +64,49 @@
            style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
   </label>
 
+  {% if rule %}
+  <div style="font-size: 12px; color: #9ca3af;">
+    Current RRULE: <code style="background: #f3f4f6; padding: 1px 6px; border-radius: 4px;">{{ rule.rrule }}</code>
+  </div>
+  {% endif %}
+
   <div style="display: flex; gap: 8px; align-items: center;">
     <button type="submit" class="btn-link" style="font-weight: 600;">Save</button>
-    <a href="{% url 'tasks:task_list' %}" class="btn-link" style="text-decoration: none;">Cancel</a>
-    {% if rule %}
-    <form method="post" action="{% url 'tasks:schedule_delete' task_id=task.id %}" style="margin-left: auto;">
-      {% csrf_token %}
-      <button type="submit" class="btn-link" style="color: #dc2626;">Remove schedule</button>
-    </form>
-    {% endif %}
+    <a href="{% url 'tasks:task_detail' task_id=task.pk %}" class="btn-link" style="text-decoration: none;">Cancel</a>
   </div>
 </form>
+
+{% if rule %}
+<form method="post" action="{% url 'tasks:schedule_delete' task_id=task.pk %}" style="margin-top: 8px;">
+  {% csrf_token %}
+  <button type="submit" class="btn-link" style="color: #dc2626;">Remove schedule</button>
+</form>
+{% endif %}
+
+<script>
+function toggleDays() {
+  var picker = document.getElementById('day-picker');
+  var checked = document.querySelector('input[name="pattern"]:checked');
+  picker.style.display = (checked && checked.value === 'custom') ? '' : 'none';
+}
+
+function styleDayLabel(cb, code) {
+  var label = document.getElementById('day-label-' + code);
+  if (cb.checked) {
+    label.style.background = '#dbeafe';
+    label.style.borderColor = '#3b82f6';
+    label.style.fontWeight = '600';
+  } else {
+    label.style.background = '';
+    label.style.borderColor = '#d1d5db';
+    label.style.fontWeight = '';
+  }
+}
+
+// Apply initial styles on load
+document.querySelectorAll('#day-picker input[type="checkbox"]').forEach(function(cb) {
+  var code = cb.value;
+  styleDayLabel(cb, code);
+});
+</script>
 {% endblock %}

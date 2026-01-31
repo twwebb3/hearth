@@ -80,6 +80,7 @@ class Task(models.Model):
                 condition=models.Q(due_date__isnull=False),
                 name="tasks_task_due_date_notnull",
             ),
+            models.Index(fields=["assigned_to", "is_active"]),
         ]
         constraints = [
             models.CheckConstraint(
@@ -109,6 +110,7 @@ class TaskScheduleRule(models.Model):
     rrule = models.TextField(help_text="iCal RRULE string")
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
     timezone = models.CharField(max_length=63, default="America/New_York")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -151,10 +153,17 @@ class TaskInstance(models.Model):
                 fields=["task", "instance_date"],
                 name="unique_task_instance_date",
             ),
+            models.UniqueConstraint(
+                fields=["instance_date", "completion_order"],
+                condition=models.Q(completion_order__isnull=False),
+                name="unique_completion_order_per_date",
+            ),
         ]
         indexes = [
             models.Index(fields=["instance_date", "status"]),
             models.Index(fields=["task", "instance_date"]),
+            models.Index(fields=["instance_date", "completion_order"]),
+            models.Index(fields=["instance_date", "source"]),
         ]
 
     def __str__(self):

@@ -10,14 +10,188 @@
   .analytics-table tr:last-child td { border-bottom: none; }
   .analytics-table .num { text-align: right; font-variant-numeric: tabular-nums; }
   .pct-bar { display: inline-block; height: 8px; border-radius: 4px; background: #10b981; vertical-align: middle; }
+  .rate-cell { white-space: nowrap; }
 </style>
 {% endblock %}
 
 {% block content %}
 {% include "tasks/_subnav.html" with page_title="Analytics" %}
-<p style="margin-top: 0; color: #6b7280;">{{ start|date:"M j, Y" }} &ndash; {{ end|date:"M j, Y" }}</p>
 
-<form method="get" style="display: flex; gap: 8px; align-items: end; margin-bottom: 24px; flex-wrap: wrap;">
+{# ── 1. Domain Completion Rates (7 / 14 / 30 days) ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 10px;">Domain Completion Rates</h2>
+  <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Completed / total instances, sorted by 30-day rate.</p>
+  {% if domain_rows %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Domain</th>
+        <th class="num">7 d</th>
+        <th style="min-width: 90px;">Rate</th>
+        <th class="num">14 d</th>
+        <th style="min-width: 90px;">Rate</th>
+        <th class="num">30 d</th>
+        <th style="min-width: 90px;">Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in domain_rows %}
+      <tr>
+        <td>
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: {{ row.domain.color_hex }}; vertical-align: middle; margin-right: 6px;"></span>
+          <a href="{% url 'tasks:domain_detail' pk=row.domain.pk %}" style="color: inherit;">{{ row.domain.name }}</a>
+        </td>
+        <td class="num">{{ row.completed_7d }}/{{ row.total_7d }}</td>
+        <td class="rate-cell">
+          <span class="pct-bar" style="width: {{ row.rate_7d }}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{{ row.rate_7d }}%</span>
+        </td>
+        <td class="num">{{ row.completed_14d }}/{{ row.total_14d }}</td>
+        <td class="rate-cell">
+          <span class="pct-bar" style="width: {{ row.rate_14d }}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{{ row.rate_14d }}%</span>
+        </td>
+        <td class="num">{{ row.completed_30d }}/{{ row.total_30d }}</td>
+        <td class="rate-cell">
+          <span class="pct-bar" style="width: {{ row.rate_30d }}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{{ row.rate_30d }}%</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No instance data yet.</p>
+  {% endif %}
+</div>
+
+{# ── 1b. Activity Timeline (30 days) ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 4px;">Activity Timeline</h2>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">
+    Completions per day over the last 30 days.
+    {% if total_completions %}
+    <strong>{{ total_completions }}</strong> total &middot;
+    <strong>{{ avg_per_day }}</strong> avg/day{% if overall_median_time %} &middot;
+    median time <strong>{{ overall_median_time }}</strong>{% endif %}
+    {% endif %}
+  </p>
+
+  {% if timeline %}
+  <div style="display: flex; align-items: end; gap: 2px; height: 120px; margin-bottom: 4px;">
+    {% for row in timeline %}
+    <div title="{{ row.date|date:'D, M j' }}: {{ row.count }} completion{{ row.count|pluralize }}{% if row.median_time %} (median {{ row.median_time }}){% endif %}"
+         style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%;">
+      <div style="background: {% if row.count %}#3b82f6{% else %}#e5e7eb{% endif %}; border-radius: 2px 2px 0 0; min-height: 2px;
+                  height: {% if row.bar_pct %}{{ row.bar_pct }}%{% else %}2%{% endif %};"></div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="display: flex; justify-content: space-between; font-size: 10px; color: #9ca3af;">
+    <span>{{ timeline.0.date|date:"M j" }}</span>
+    <span>Today</span>
+  </div>
+
+  <details style="margin-top: 12px;">
+    <summary style="cursor: pointer; font-size: 13px; color: #6b7280; user-select: none;">Show daily breakdown</summary>
+    <table class="analytics-table" style="margin-top: 8px;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th class="num">Completed</th>
+          <th>Median Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in timeline reversed %}
+        {% if row.count %}
+        <tr>
+          <td>{{ row.date|date:"D, M j" }}</td>
+          <td class="num">{{ row.count }}</td>
+          <td>{% if row.median_time %}{{ row.median_time }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% else %}
+  <p style="color: #6b7280;">No completions in the last 30 days.</p>
+  {% endif %}
+</div>
+
+{# ── 2a. Consistently Completed (30 days) ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 4px;">Consistently Completed</h2>
+  <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Tasks completed &ge; 80% of appearances in the last 30 days (min 3 appearances).</p>
+  {% if consistently_completed %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th>Domain / Project</th>
+        <th class="num">Done / Total</th>
+        <th style="min-width: 100px;">Rate</th>
+        <th class="num">Avg Order</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in consistently_completed %}
+      <tr>
+        <td><a href="{% url 'tasks:task_detail' task_id=t.pk %}" style="color: inherit;">{{ t.name }}</a></td>
+        <td style="color: #6b7280;">{% if t.project %}{{ t.project.domain.name }} &rsaquo; {{ t.project.name }}{% elif t.domain %}{{ t.domain.name }}{% endif %}</td>
+        <td class="num">{{ t.completed_count }}/{{ t.total_count }}</td>
+        <td class="rate-cell">
+          <span class="pct-bar" style="width: {{ t.rate }}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{{ t.rate }}%</span>
+        </td>
+        <td class="num">{% if t.avg_order_display != None %}{{ t.avg_order_display }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No tasks meet the threshold yet.</p>
+  {% endif %}
+</div>
+
+{# ── 2b. Consistently Incomplete (30 days) ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 4px;">Consistently Incomplete</h2>
+  <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Tasks completed &le; 50% of appearances in the last 30 days (min 3 appearances).</p>
+  {% if consistently_incomplete %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th>Domain / Project</th>
+        <th class="num">Done / Total</th>
+        <th style="min-width: 100px;">Rate</th>
+        <th class="num">Avg Order</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in consistently_incomplete %}
+      <tr>
+        <td><a href="{% url 'tasks:task_detail' task_id=t.pk %}" style="color: inherit;">{{ t.name }}</a></td>
+        <td style="color: #6b7280;">{% if t.project %}{{ t.project.domain.name }} &rsaquo; {{ t.project.name }}{% elif t.domain %}{{ t.domain.name }}{% endif %}</td>
+        <td class="num">{{ t.completed_count }}/{{ t.total_count }}</td>
+        <td class="rate-cell">
+          <span class="pct-bar" style="width: {{ t.rate }}px; background: #ef4444;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{{ t.rate }}%</span>
+        </td>
+        <td class="num">{% if t.avg_order_display != None %}{{ t.avg_order_display }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No tasks meet the threshold yet.</p>
+  {% endif %}
+</div>
+
+{# ── Date range for sections below ── #}
+<form method="get" style="display: flex; gap: 8px; align-items: end; margin-bottom: 16px; flex-wrap: wrap;">
   <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
     Start
     <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
@@ -28,46 +202,7 @@
   </label>
   <button type="submit" class="btn-link" style="font-weight: 600; height: fit-content;">Apply</button>
 </form>
-
-{# ── 1. Completion by Domain ── #}
-<div class="card" style="margin-bottom: 16px;">
-  <h2 style="margin: 0 0 10px;">Completion by Domain</h2>
-  {% if by_domain %}
-  <table class="analytics-table">
-    <thead>
-      <tr>
-        <th>Domain</th>
-        <th class="num">Total</th>
-        <th class="num">Done</th>
-        <th class="num">Incomplete</th>
-        <th class="num">Skipped</th>
-        <th style="min-width: 120px;">Rate</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for d in by_domain %}
-      <tr>
-        <td>
-          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: {{ d.color_hex }}; vertical-align: middle; margin-right: 6px;"></span>
-          {{ d.name }}
-        </td>
-        <td class="num">{{ d.total }}</td>
-        <td class="num">{{ d.completed }}</td>
-        <td class="num">{{ d.incomplete }}</td>
-        <td class="num">{{ d.skipped }}</td>
-        <td>
-          {% widthratio d.completed d.total 100 as pct %}
-          <span class="pct-bar" style="width: {% widthratio d.completed d.total 100 %}px;"></span>
-          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio d.completed d.total 100 %}%</span>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p style="color: #6b7280;">No data for this range.</p>
-  {% endif %}
-</div>
+<p style="margin-top: 0; color: #6b7280; font-size: 13px;">Showing {{ start|date:"M j, Y" }} &ndash; {{ end|date:"M j, Y" }} for sections below.</p>
 
 {# ── 2. Completion by Project ── #}
 <div class="card" style="margin-bottom: 16px;">
@@ -88,13 +223,13 @@
     <tbody>
       {% for p in by_project %}
       <tr>
-        <td>{{ p.name }}</td>
+        <td><a href="{% url 'tasks:project_detail' pk=p.pk %}" style="color: inherit;">{{ p.name }}</a></td>
         <td style="color: #6b7280;">{{ p.domain.name }}</td>
         <td class="num">{{ p.total }}</td>
         <td class="num">{{ p.completed }}</td>
         <td class="num">{{ p.incomplete }}</td>
         <td class="num">{{ p.skipped }}</td>
-        <td>
+        <td class="rate-cell">
           <span class="pct-bar" style="width: {% widthratio p.completed p.total 100 %}px;"></span>
           <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio p.completed p.total 100 %}%</span>
         </td>
@@ -116,8 +251,7 @@
     <thead>
       <tr>
         <th>Task</th>
-        <th>Project</th>
-        <th>Domain</th>
+        <th>Domain / Project</th>
         <th class="num">Incomplete</th>
         <th class="num">Total</th>
         <th style="min-width: 120px;">Incompletion Rate</th>
@@ -126,12 +260,11 @@
     <tbody>
       {% for t in chronic %}
       <tr>
-        <td>{{ t.name }}</td>
-        <td>{% if t.project %}{{ t.project.name }}{% else %}&mdash;{% endif %}</td>
-        <td style="color: #6b7280;">{% if t.project %}{{ t.project.domain.name }}{% else %}{{ t.domain.name }}{% endif %}</td>
+        <td><a href="{% url 'tasks:task_detail' task_id=t.pk %}" style="color: inherit;">{{ t.name }}</a></td>
+        <td style="color: #6b7280;">{% if t.project %}{{ t.project.domain.name }} &rsaquo; {{ t.project.name }}{% elif t.domain %}{{ t.domain.name }}{% endif %}</td>
         <td class="num">{{ t.incomplete_count }}</td>
         <td class="num">{{ t.total_count }}</td>
-        <td>
+        <td class="rate-cell">
           <span class="pct-bar" style="width: {% widthratio t.incomplete_count t.total_count 100 %}px; background: #ef4444;"></span>
           <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio t.incomplete_count t.total_count 100 %}%</span>
         </td>
@@ -141,6 +274,55 @@
   </table>
   {% else %}
   <p style="color: #6b7280;">No chronically incomplete tasks in this range.</p>
+  {% endif %}
+</div>
+
+{# ── 5. Overdue Aging ── #}
+<div class="card" style="margin-top: 16px; margin-bottom: 16px;">
+  <h2 style="margin: 0 0 4px;">Overdue Aging</h2>
+  <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280;">Incomplete instances past their task's due date, bucketed by days overdue.</p>
+
+  {% if histogram %}
+  <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px;">
+    {% for b in histogram %}
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="width: 90px; font-size: 13px; text-align: right; flex-shrink: 0; color: #374151;">{{ b.label }}</span>
+      <div style="flex: 1; height: 20px; background: #f3f4f6; border-radius: 4px; overflow: hidden;">
+        {% if b.bar_pct %}
+        <div style="height: 100%; width: {{ b.bar_pct }}%; background: #ef4444; border-radius: 4px; transition: width 0.2s;"></div>
+        {% endif %}
+      </div>
+      <span style="width: 32px; font-size: 13px; font-variant-numeric: tabular-nums; color: #6b7280;">{{ b.count }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if overdue_list %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th>Domain / Project</th>
+        <th class="num">Due</th>
+        <th class="num">Days Overdue</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inst in overdue_list %}
+      <tr>
+        <td><a href="{% url 'tasks:task_detail' task_id=inst.task.pk %}" style="color: inherit;">{{ inst.task.name }}</a></td>
+        <td style="color: #6b7280;">{% if inst.task.project %}{{ inst.task.project.domain.name }} &rsaquo; {{ inst.task.project.name }}{% elif inst.task.domain %}{{ inst.task.domain.name }}{% endif %}</td>
+        <td class="num" style="color: #b45309;">{{ inst.task.due_date|date:"M j" }}</td>
+        <td class="num">
+          <span style="{% if inst.days_overdue >= 14 %}color: #dc2626; font-weight: 600;{% elif inst.days_overdue >= 7 %}color: #b45309;{% else %}color: #6b7280;{% endif %}">{{ inst.days_overdue }}d</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No overdue tasks.</p>
   {% endif %}
 </div>
 {% endblock %}

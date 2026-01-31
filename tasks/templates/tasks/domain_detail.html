@@ -82,7 +82,7 @@
       {% if t.description %}<div style="font-size: 13px; color: #6b7280;">{{ t.description }}</div>{% endif %}
     </div>
     <div style="display: flex; gap: 8px; font-size: 13px; flex-shrink: 0;">
-      {% if t.schedule_rule %}<span style="font-size: 11px; background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 4px;">scheduled</span>{% endif %}
+      {% if t.schedule_rule %}<span style="font-size: 11px; padding: 1px 6px; border-radius: 4px; {% if t.schedule_rule.is_active %}background: #e0e7ff; color: #3730a3;{% else %}background: #fef3c7; color: #92400e;{% endif %}">{% if t.schedule_rule.is_active %}scheduled{% else %}paused{% endif %}</span>{% endif %}
       <a href="{% url 'tasks:schedule_edit' task_id=t.pk %}" class="btn-link" style="font-size: 13px; text-decoration: none;">Schedule</a>
     </div>
   </div>

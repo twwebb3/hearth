@@ -189,6 +189,57 @@ class GeneratorIdempotencyTests(TestCase):
         self.assertLess(orders["Mid"], orders["Low"])
 
 
+class CompletionOrderConstraintTests(TestCase):
+    """completion_order must be unique per (instance_date) when non-null."""
+
+    def setUp(self):
+        self.domain = Domain.objects.create(name="D", sort_order=0)
+        self.project = Project.objects.create(name="P", domain=self.domain)
+        self.date = datetime.date(2026, 6, 1)
+
+    def test_duplicate_completion_order_same_date_raises(self):
+        t1 = Task.objects.create(name="A", project=self.project)
+        t2 = Task.objects.create(name="B", domain=Domain.objects.create(name="D2", sort_order=0))
+        TaskInstance.objects.create(
+            task=t1, instance_date=self.date,
+            status="complete", completion_order=1,
+        )
+        with self.assertRaises(IntegrityError):
+            TaskInstance.objects.create(
+                task=t2, instance_date=self.date,
+                status="complete", completion_order=1,
+            )
+
+    def test_null_completion_order_allowed_multiple(self):
+        """Multiple incomplete instances (null completion_order) on the same date is fine."""
+        for i in range(3):
+            t = Task.objects.create(
+                name=f"T{i}",
+                domain=Domain.objects.create(name=f"D{i}", sort_order=i),
+            )
+            TaskInstance.objects.create(task=t, instance_date=self.date)
+        self.assertEqual(
+            TaskInstance.objects.filter(
+                instance_date=self.date, completion_order__isnull=True,
+            ).count(),
+            3,
+        )
+
+    def test_same_order_different_dates_ok(self):
+        t1 = Task.objects.create(name="A", project=self.project)
+        t2 = Task.objects.create(name="B", domain=Domain.objects.create(name="D2", sort_order=0))
+        TaskInstance.objects.create(
+            task=t1, instance_date=self.date,
+            status="complete", completion_order=1,
+        )
+        next_day = self.date + datetime.timedelta(days=1)
+        TaskInstance.objects.create(
+            task=t2, instance_date=next_day,
+            status="complete", completion_order=1,
+        )
+        self.assertEqual(TaskInstance.objects.filter(completion_order=1).count(), 2)
+
+
 class CompletionOrderTests(TestCase):
     """completion_order must auto-increment per day via the complete endpoint."""
 
@@ -275,6 +326,91 @@ class CompletionOrderTests(TestCase):
         self._complete(self.instances[0])
         # Today's first completion should be 1, not 100
         self.assertEqual(self.instances[0].completion_order, 1)
+
+
+class ToggleCompleteTests(TestCase):
+    """toggle_complete endpoint must assign/clear ordering correctly."""
+
+    def setUp(self):
+        self.domain = Domain.objects.create(name="D", sort_order=0)
+        self.project = Project.objects.create(name="P", domain=self.domain)
+        self.date = timezone.localdate()
+        self.instances = []
+        for i in range(4):
+            task = Task.objects.create(
+                name=f"T{i}", project=self.project,
+            )
+            inst = TaskInstance.objects.create(
+                task=task, instance_date=self.date, assigned_order=i,
+            )
+            self.instances.append(inst)
+
+    def _toggle(self, instance):
+        self.client.post(
+            f"/tasks/instances/{instance.pk}/toggle-complete/",
+        )
+        instance.refresh_from_db()
+
+    def test_toggle_complete_assigns_order_and_timestamp(self):
+        self._toggle(self.instances[0])
+        self.assertEqual(self.instances[0].status, "complete")
+        self.assertEqual(self.instances[0].completion_order, 1)
+        self.assertIsNotNone(self.instances[0].completed_at)
+
+    def test_toggle_uncomplete_clears_order_and_timestamp(self):
+        self._toggle(self.instances[0])  # complete
+        self._toggle(self.instances[0])  # uncomplete
+        self.assertEqual(self.instances[0].status, "incomplete")
+        self.assertIsNone(self.instances[0].completion_order)
+        self.assertIsNone(self.instances[0].completed_at)
+
+    def test_toggle_sequential_orders(self):
+        self._toggle(self.instances[0])
+        self._toggle(self.instances[1])
+        self._toggle(self.instances[2])
+        self.assertEqual(self.instances[0].completion_order, 1)
+        self.assertEqual(self.instances[1].completion_order, 2)
+        self.assertEqual(self.instances[2].completion_order, 3)
+
+    def test_toggle_recomplete_skips_gap(self):
+        """Uncompleting and re-completing gets max+1, not the old value."""
+        self._toggle(self.instances[0])  # order=1
+        self._toggle(self.instances[1])  # order=2
+        self._toggle(self.instances[0])  # uncomplete (None)
+        self._toggle(self.instances[0])  # re-complete → order=3
+        self.assertEqual(self.instances[0].completion_order, 3)
+        self.assertEqual(self.instances[1].completion_order, 2)
+
+    def test_interleaved_toggles_maintain_uniqueness(self):
+        """Complex toggle sequence never produces duplicate orders."""
+        self._toggle(self.instances[0])  # complete → 1
+        self._toggle(self.instances[1])  # complete → 2
+        self._toggle(self.instances[0])  # uncomplete → None
+        self._toggle(self.instances[2])  # complete → 3
+        self._toggle(self.instances[1])  # uncomplete → None
+        self._toggle(self.instances[0])  # complete → 4
+        self._toggle(self.instances[3])  # complete → 5
+        self._toggle(self.instances[1])  # complete → 6
+
+        orders = list(
+            TaskInstance.objects
+            .filter(instance_date=self.date, completion_order__isnull=False)
+            .values_list("completion_order", flat=True)
+        )
+        self.assertEqual(len(orders), len(set(orders)), "Duplicate completion_order found")
+        self.assertEqual(sorted(orders), [3, 4, 5, 6])
+
+    def test_toggle_creates_execution_records(self):
+        self._toggle(self.instances[0])  # completed
+        self._toggle(self.instances[0])  # uncompleted
+        self._toggle(self.instances[0])  # completed
+        events = list(
+            TaskExecution.objects
+            .filter(task_instance=self.instances[0])
+            .order_by("event_at")
+            .values_list("event_type", flat=True)
+        )
+        self.assertEqual(events, ["completed", "uncompleted", "completed"])
 
 
 class TodayViewOrderingTests(TestCase):
