@@ -362,6 +362,17 @@ def schedule_delete(request, task_id):
 
 
 def domains(request):
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name:
+            Domain.objects.create(
+                name=name,
+                description=request.POST.get("description", "").strip(),
+                color_hex=request.POST.get("color_hex", "#6B7280").strip() or "#6B7280",
+                sort_order=int(request.POST.get("sort_order", 0) or 0),
+            )
+        return redirect("tasks:domains")
+
     today_date = timezone.localdate()
     domain_list = (
         Domain.objects

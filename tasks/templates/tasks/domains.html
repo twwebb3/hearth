@@ -27,4 +27,24 @@
   No domains yet.
 </div>
 {% endif %}
+
+<h3 style="margin-top: 24px;">Add Domain</h3>
+<form method="post" class="card" style="display: flex; flex-direction: column; gap: 8px;">
+  {% csrf_token %}
+  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <input type="text" name="name" placeholder="Name" required
+           style="flex: 2; min-width: 140px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+    <input type="text" name="description" placeholder="Description (optional)"
+           style="flex: 3; min-width: 180px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+  </div>
+  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+    <label style="font-size: 13px; color: #6b7280;">Color</label>
+    <input type="color" name="color_hex" value="#6B7280"
+           style="width: 36px; height: 30px; padding: 0; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;">
+    <label style="font-size: 13px; color: #6b7280; margin-left: 8px;">Sort order</label>
+    <input type="number" name="sort_order" value="0"
+           style="width: 64px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+    <button type="submit" class="btn btn-primary" style="margin-left: auto;">Add Domain</button>
+  </div>
+</form>
 {% endblock %}
