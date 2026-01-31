@@ -1,6 +1,12 @@
+from datetime import date as date_type
 from datetime import timedelta
 
-from .models import MealPlan, MealRating, Recipe
+from django.db.models import Exists, OuterRef
+
+from .models import Combo, ComboStats, MealPlan, MealRating, Recipe
+
+# How many days a combo must "rest" before suggest_top_combo() recommends it again.
+TOP_COMBO_COOLDOWN_DAYS = 14
 
 
 def _meal_plan_queryset():
@@ -162,6 +168,122 @@ def get_active_recipes(kind=None):
     if kind:
         qs = qs.filter(kind=kind)
     return qs.order_by("name")
+
+
+def get_or_create_combo(main_recipe=None, side_recipe=None,
+                        main_recipe_id=None, side_recipe_id=None):
+    """Get or create a Combo for a (main, side) recipe pairing.
+
+    Accepts either Recipe instances or raw IDs.
+
+    Args:
+        main_recipe: Recipe instance (kind=MAIN)
+        side_recipe: Recipe instance (kind=SIDE)
+        main_recipe_id: PK of the main Recipe
+        side_recipe_id: PK of the side Recipe
+
+    Returns:
+        Tuple of (Combo, created_bool)
+    """
+    kwargs = {}
+    if main_recipe is not None:
+        kwargs["main_recipe"] = main_recipe
+    elif main_recipe_id is not None:
+        kwargs["main_recipe_id"] = main_recipe_id
+    if side_recipe is not None:
+        kwargs["side_recipe"] = side_recipe
+    elif side_recipe_id is not None:
+        kwargs["side_recipe_id"] = side_recipe_id
+    return Combo.objects.get_or_create(**kwargs)
+
+
+def get_combo(combo_id):
+    """Return a single Combo by PK with recipes and stats, or None."""
+    try:
+        return Combo.objects.select_related(
+            "main_recipe", "side_recipe", "stats",
+        ).get(pk=combo_id)
+    except Combo.DoesNotExist:
+        return None
+
+
+def toggle_combo_archived(combo):
+    """Toggle a combo's archived state.
+
+    Returns:
+        The updated Combo instance.
+    """
+    combo.archived = not combo.archived
+    combo.save(update_fields=["archived"])
+    return combo
+
+
+def get_qualified_combos(active_only=False, min_rating=None, exclude_archived=True):
+    """Return all Combos that have at least one finalized, rated MealPlan.
+
+    Sorted best-performing first: avg_rating desc, would_repeat_rate desc,
+    times_made desc.
+
+    Args:
+        active_only: If True, only include combos where both recipes are active.
+        min_rating: If set, exclude combos with avg_rating below this value.
+        exclude_archived: If True (default), exclude archived combos.
+    """
+    qs = (
+        Combo.objects.qualified()
+        .select_related("main_recipe", "side_recipe", "stats")
+        .filter(stats__times_made__gte=1)
+        .order_by("-stats__avg_rating", "-stats__would_repeat_rate", "-stats__times_made")
+    )
+    if exclude_archived:
+        qs = qs.filter(archived=False)
+    if active_only:
+        qs = qs.filter(main_recipe__active=True, side_recipe__active=True)
+    if min_rating is not None:
+        qs = qs.filter(stats__avg_rating__gte=min_rating)
+    return qs
+
+
+def suggest_top_combo(today=None):
+    """Return the highest-ranked combo not planned in the last N days.
+
+    "Planned" means any MealPlan row (any status) exists for the pair within
+    the cooldown window.  Returns None when every combo was used recently or
+    no qualified combos exist.
+
+    Args:
+        today: Override for the current date (useful in tests).
+    """
+    if today is None:
+        today = date_type.today()
+
+    cutoff = today - timedelta(days=TOP_COMBO_COOLDOWN_DAYS)
+
+    recent_use = MealPlan.objects.filter(
+        main_recipe_id=OuterRef("main_recipe_id"),
+        side_recipe_id=OuterRef("side_recipe_id"),
+        date__gte=cutoff,
+    )
+
+    return (
+        get_qualified_combos(active_only=True, min_rating=3)
+        .exclude(Exists(recent_use))
+        .first()
+    )
+
+
+def refresh_combo_stats(combo):
+    """Refresh (or create) the ComboStats row for a given Combo.
+
+    Args:
+        combo: Combo instance whose stats should be recomputed.
+
+    Returns:
+        The updated ComboStats instance.
+    """
+    stats, _ = ComboStats.objects.get_or_create(combo=combo)
+    stats.refresh_from_plans()
+    return stats
 
 
 def get_rated_meal_plans(rating=None, would_repeat=None, recipe_search=None):

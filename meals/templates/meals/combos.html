@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Best Combos - Meals{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="margin: 0;">Best Combos</h1>
+    <div style="display: flex; gap: 12px; align-items: center;">
+        {% if include_archived %}
+        <a href="{% url 'meals:combo_list' %}{% if show_all %}?show_all=1{% endif %}" class="btn-link" style="text-decoration: none; font-size: 13px;">Hide archived</a>
+        {% else %}
+        <a href="{% url 'meals:combo_list' %}?include_archived=1{% if show_all %}&show_all=1{% endif %}" class="btn-link" style="text-decoration: none; font-size: 13px;">Include archived</a>
+        {% endif %}
+        {% if show_all %}
+        <a href="{% url 'meals:combo_list' %}{% if include_archived %}?include_archived=1{% endif %}" class="btn-link" style="text-decoration: none; font-size: 13px;">Hide low-rated</a>
+        {% else %}
+        <a href="{% url 'meals:combo_list' %}?show_all=1{% if include_archived %}&include_archived=1{% endif %}" class="btn-link" style="text-decoration: none; font-size: 13px;">Show all</a>
+        {% endif %}
+        <a href="{% url 'meals:week' %}" class="btn-link" style="text-decoration: none;">&larr; Back to week</a>
+    </div>
+</div>
+
+{% if combos %}
+<div class="card">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Main</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Side</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Times Made</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Avg Rating</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Would Repeat</th>
+                <th style="text-align: right; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Last Made</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for combo in combos %}
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">
+                    <a href="{% url 'meals:combo_detail' pk=combo.id %}">{{ combo.main_recipe.name }}</a>
+                    {% if combo.archived %}<span style="font-size: 11px; color: #92400e; margin-left: 4px;">(archived)</span>{% endif %}
+                </td>
+                <td style="padding: 12px;"><a href="{% url 'meals:combo_detail' pk=combo.id %}">{{ combo.side_recipe.name }}</a></td>
+                <td style="padding: 12px; text-align: center;">{{ combo.stats.times_made }}</td>
+                <td style="padding: 12px; text-align: center;">
+                    <span style="font-size: 18px; font-weight: 600; {% if combo.stats.avg_rating >= 4 %}color: #059669;{% elif combo.stats.avg_rating <= 2 %}color: #dc2626;{% else %}color: #d97706;{% endif %}">{{ combo.stats.avg_rating|floatformat:1 }}</span>
+                    <span style="color: #9ca3af;">/5</span>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    {% widthratio combo.stats.would_repeat_rate 1 100 as repeat_pct %}
+                    <span style="{% if combo.stats.would_repeat_rate >= 0.5 %}color: #059669;{% else %}color: #9ca3af;{% endif %}">{{ repeat_pct }}%</span>
+                </td>
+                <td style="padding: 12px; text-align: right; color: #6b7280; font-size: 13px;">
+                    {{ combo.stats.last_made_at|date:"M j, Y" }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div style="margin-top: 16px; color: #6b7280; font-size: 13px;">
+    Showing {{ combos|length }} combo{{ combos|length|pluralize }}{% if not show_all %} rated 3+{% endif %}{% if include_archived %} (including archived){% endif %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 40px; color: #6b7280;">
+    {% if not show_all %}
+    <p>No combos rated 3 or above.</p>
+    <p style="font-size: 14px;"><a href="{% url 'meals:combo_list' %}?show_all=1{% if include_archived %}&include_archived=1{% endif %}">Show all combos</a> to see lower-rated ones.</p>
+    {% else %}
+    <p>No combos yet.</p>
+    <p style="font-size: 14px;">Finalize and rate meal plans with both a main and side recipe to see combos here.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

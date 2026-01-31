@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ combo.main_recipe.name }} + {{ combo.side_recipe.name }} - Combo{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <h1 style="margin: 0;">{{ combo.main_recipe.name }} + {{ combo.side_recipe.name }}</h1>
+        {% if combo.archived %}
+        <span style="text-transform: uppercase; font-size: 12px; padding: 2px 8px; background: #fef3c7; border-radius: 4px; color: #92400e;">Archived</span>
+        {% endif %}
+    </div>
+    <a href="{% url 'meals:combo_list' %}" class="btn-link" style="text-decoration: none;">&larr; All combos</a>
+</div>
+
+<div class="card" style="margin-bottom: 20px;">
+    <div style="display: flex; gap: 32px; flex-wrap: wrap;">
+        <div>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Times Made</div>
+            <div style="font-size: 24px; font-weight: 600;">{{ combo.stats.times_made }}</div>
+        </div>
+        <div>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Avg Rating</div>
+            <div style="font-size: 24px; font-weight: 600; {% if combo.stats.avg_rating >= 4 %}color: #059669;{% elif combo.stats.avg_rating <= 2 %}color: #dc2626;{% else %}color: #d97706;{% endif %}">
+                {{ combo.stats.avg_rating|floatformat:1 }}<span style="font-size: 14px; font-weight: 400; color: #9ca3af;">/5</span>
+            </div>
+        </div>
+        <div>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Would Repeat</div>
+            <div style="font-size: 24px; font-weight: 600; {% if combo.stats.would_repeat_rate >= 0.5 %}color: #059669;{% else %}color: #9ca3af;{% endif %}">
+                {% widthratio combo.stats.would_repeat_rate 1 100 as repeat_pct %}{{ repeat_pct }}%
+            </div>
+        </div>
+        <div>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Last Made</div>
+            <div style="font-size: 24px; font-weight: 600;">{{ combo.stats.last_made_at|date:"M j, Y"|default:"-" }}</div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-bottom: 20px;">
+    <form method="post" action="{% url 'meals:combo_toggle_archive' pk=combo.id %}" style="margin: 0;">
+        {% csrf_token %}
+        {% if combo.archived %}
+        <button type="submit" class="btn-link">Unarchive</button>
+        {% else %}
+        <button type="submit" class="btn-link" style="color: #92400e;">Archive</button>
+        {% endif %}
+    </form>
+</div>
+
+<h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">History</h2>
+
+{% if meal_plans %}
+<div class="card">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Date</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Rating</th>
+                <th style="text-align: center; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Repeat?</th>
+                <th style="text-align: left; padding: 10px 12px; font-weight: 500; color: #6b7280; font-size: 13px;">Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mp in meal_plans %}
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">
+                    <a href="{% url 'meals:meal_plan_detail' pk=mp.id %}">{{ mp.date|date:"M j, Y" }}</a>
+                    <div style="font-size: 12px; color: #9ca3af;">{{ mp.date|date:"l" }}</div>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    <span style="font-size: 18px; font-weight: 600; {% if mp.rating.rating >= 4 %}color: #059669;{% elif mp.rating.rating <= 2 %}color: #dc2626;{% else %}color: #d97706;{% endif %}">{{ mp.rating.rating }}</span>
+                    <span style="color: #9ca3af;">/5</span>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    {% if mp.rating.would_repeat %}
+                    <span style="color: #059669;">Yes</span>
+                    {% else %}
+                    <span style="color: #9ca3af;">No</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px; font-size: 13px; color: #6b7280; max-width: 300px;">
+                    {{ mp.rating.comment|default:"-" }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 40px; color: #6b7280;">
+    <p>No rated meals for this combo yet.</p>
+</div>
+{% endif %}
+{% endblock %}

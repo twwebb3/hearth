@@ -69,6 +69,16 @@
     <p style="color: #6b7280; margin: 0 0 20px 0;">{{ meal_plan.date|date:"l, F j, Y" }}</p>
     {% endif %}
 
+    {% if meal_plan and top_combo %}
+    <form method="post" action="{% url 'meals:pick_top_combo' pk=meal_plan.pk %}" style="margin-bottom: 16px;">
+        {% csrf_token %}
+        <button type="submit" class="btn-link" style="width: 100%; text-align: left; padding: 10px 12px;">
+            Pick a top combo: <strong>{{ top_combo.main_recipe.name }} + {{ top_combo.side_recipe.name }}</strong>
+            <span style="color: #6b7280; font-size: 13px;">({{ top_combo.stats.avg_rating|floatformat:1 }} avg, {{ top_combo.stats.times_made }}x)</span>
+        </button>
+    </form>
+    {% endif %}
+
     {% if form.non_field_errors %}
     <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 16px; color: #dc2626;">
         {% for error in form.non_field_errors %}
@@ -92,6 +102,21 @@
                 {% for error in form.date.errors %}{{ error }}{% endfor %}
             </div>
             {% endif %}
+        </div>
+        {% endif %}
+
+        {% if combos %}
+        <div class="form-group">
+            <label for="id_combo_picker">Choose from combos</label>
+            <select id="id_combo_picker" style="padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box;">
+                <option value="">-- Or pick main/side manually below --</option>
+                {% for combo in combos %}
+                <option
+                    data-main-id="{{ combo.main_recipe_id }}"
+                    data-side-id="{{ combo.side_recipe_id }}"
+                >{{ combo.main_recipe.name }} + {{ combo.side_recipe.name }} ({{ combo.stats.avg_rating|floatformat:1 }} avg, {{ combo.stats.times_made }}x)</option>
+                {% endfor %}
+            </select>
         </div>
         {% endif %}
 
@@ -149,4 +174,15 @@
         </div>
     </form>
 </div>
+{% if combos %}
+<script>
+document.getElementById('id_combo_picker').addEventListener('change', function() {
+    var opt = this.options[this.selectedIndex];
+    var mainId = opt.dataset.mainId || '';
+    var sideId = opt.dataset.sideId || '';
+    document.getElementById('id_main_recipe').value = mainId;
+    document.getElementById('id_side_recipe').value = sideId;
+});
+</script>
+{% endif %}
 {% endblock %}

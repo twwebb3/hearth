@@ -6,6 +6,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
     <h1 style="margin: 0;">Meal Plan</h1>
     <div style="display: flex; gap: 8px;">
+        <a href="{% url 'meals:combo_list' %}" class="btn-link" style="text-decoration: none;">Best Combos</a>
         <a href="{% url 'meals:ratings_history' %}" class="btn-link" style="text-decoration: none;">Ratings History</a>
         <a href="{% url 'meals:recipe_list' %}" class="btn-link" style="text-decoration: none;">Manage Recipes</a>
     </div>

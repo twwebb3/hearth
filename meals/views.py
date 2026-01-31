@@ -78,6 +78,7 @@ def meal_plan_create(request):
         "form": form,
         "title": "Add Meal Plan",
         "submit_label": "Create Meal Plan",
+        "combos": services.get_qualified_combos(active_only=True, min_rating=3),
     })
 
 
@@ -111,6 +112,8 @@ def meal_plan_edit(request, pk):
         "meal_plan": meal_plan,
         "title": "Pick Recipes",
         "submit_label": "Save",
+        "combos": services.get_qualified_combos(active_only=True, min_rating=3),
+        "top_combo": services.suggest_top_combo(),
     })
 
 
@@ -186,6 +189,79 @@ def meal_plan_rate(request, pk):
         "meal_plan": meal_plan,
         "existing_rating": rating,
     })
+
+
+@login_required
+def pick_top_combo(request, pk):
+    """Quick-action: fill a meal plan with the best combo not used recently."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    meal_plan = services.get_meal_plan(meal_plan_id=pk)
+    if meal_plan is None:
+        raise Http404("Meal plan not found")
+
+    if meal_plan.status == "FINALIZED":
+        messages.warning(request, "This meal plan is finalized.")
+        return redirect("meals:meal_plan_detail", pk=pk)
+
+    combo = services.suggest_top_combo()
+    if combo is None:
+        messages.info(request, "No combo available — all top combos were used recently.")
+        return redirect("meals:meal_plan_edit", pk=pk)
+
+    meal_plan.main_recipe = combo.main_recipe
+    meal_plan.side_recipe = combo.side_recipe
+    meal_plan.save()
+
+    messages.success(request, f"Picked top combo: {combo}")
+    return redirect("meals:meal_plan_edit", pk=pk)
+
+
+@login_required
+def combo_list(request):
+    """List qualified combos sorted by best-performing first."""
+    show_all = request.GET.get("show_all") == "1"
+    include_archived = request.GET.get("include_archived") == "1"
+    min_rating = None if show_all else 3
+    combos = services.get_qualified_combos(
+        min_rating=min_rating,
+        exclude_archived=not include_archived,
+    )
+    return render(request, "meals/combos.html", {
+        "combos": combos,
+        "show_all": show_all,
+        "include_archived": include_archived,
+    })
+
+
+@login_required
+def combo_detail(request, pk):
+    """Show combo stats and historical rated meal plans."""
+    combo = services.get_combo(pk)
+    if combo is None:
+        raise Http404("Combo not found")
+    meal_plans = combo.rated_meal_plans().order_by("-date").prefetch_related("rating")
+    return render(request, "meals/combo_detail.html", {
+        "combo": combo,
+        "meal_plans": meal_plans,
+    })
+
+
+@login_required
+def combo_toggle_archive(request, pk):
+    """Toggle a combo's archived state (POST only)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    combo = services.get_combo(pk)
+    if combo is None:
+        raise Http404("Combo not found")
+
+    services.toggle_combo_archived(combo)
+    action = "archived" if combo.archived else "unarchived"
+    messages.success(request, f"Combo {action}.")
+    return redirect("meals:combo_detail", pk=pk)
 
 
 @login_required
