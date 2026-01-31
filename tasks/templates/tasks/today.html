@@ -63,6 +63,22 @@
         {% if inst.source == 'rolled_over' %}<span style="font-size: 11px; background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 4px; margin-left: 4px;">rolled over</span>{% endif %}
       </div>
     </div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      {% if not forloop.first %}
+      <form method="post" action="{% url 'tasks:reorder' pk=inst.pk %}" style="margin: 0;">
+        {% csrf_token %}
+        <input type="hidden" name="direction" value="up">
+        <button type="submit" class="btn-link" style="font-size: 11px; padding: 0 4px; line-height: 1;">&#9650;</button>
+      </form>
+      {% endif %}
+      {% if not forloop.last %}
+      <form method="post" action="{% url 'tasks:reorder' pk=inst.pk %}" style="margin: 0;">
+        {% csrf_token %}
+        <input type="hidden" name="direction" value="down">
+        <button type="submit" class="btn-link" style="font-size: 11px; padding: 0 4px; line-height: 1;">&#9660;</button>
+      </form>
+      {% endif %}
+    </div>
     <form method="post" action="{% url 'tasks:toggle_complete' pk=inst.pk %}">
       {% csrf_token %}
       <button type="submit" class="btn-link" style="font-size: 13px;">Complete</button>

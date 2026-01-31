@@ -209,6 +209,51 @@ def toggle_complete(request, pk):
     return redirect("tasks:today")
 
 
+@require_POST
+def reorder(request, pk):
+    instance = get_object_or_404(TaskInstance, pk=pk)
+    direction = request.POST.get("direction", "")
+
+    if instance.status != TaskInstance.Status.INCOMPLETE:
+        return redirect("tasks:today")
+
+    siblings = list(
+        TaskInstance.objects
+        .filter(
+            instance_date=instance.instance_date,
+            status=TaskInstance.Status.INCOMPLETE,
+        )
+        .order_by("assigned_order", "task__priority")
+    )
+
+    pks = [s.pk for s in siblings]
+    try:
+        idx = pks.index(instance.pk)
+    except ValueError:
+        return redirect("tasks:today")
+
+    if direction == "up" and idx > 0:
+        swap_idx = idx - 1
+    elif direction == "down" and idx < len(pks) - 1:
+        swap_idx = idx + 1
+    else:
+        return redirect("tasks:today")
+
+    other = siblings[swap_idx]
+    instance.assigned_order, other.assigned_order = other.assigned_order, instance.assigned_order
+
+    if instance.assigned_order == other.assigned_order:
+        if direction == "up":
+            instance.assigned_order -= 1
+        else:
+            instance.assigned_order += 1
+
+    instance.save(update_fields=["assigned_order", "updated_at"])
+    other.save(update_fields=["assigned_order", "updated_at"])
+
+    return redirect("tasks:today")
+
+
 def schedule_edit(request, task_id):
     task = get_object_or_404(Task, pk=task_id)
     rule = getattr(task, "schedule_rule", None)
@@ -249,15 +294,216 @@ def schedule_delete(request, task_id):
 
 
 def domains(request):
-    return render(request, "tasks/domains.html")
+    today_date = timezone.localdate()
+    domain_list = (
+        Domain.objects
+        .annotate(
+            active_projects=Count(
+                "projects",
+                filter=Q(projects__status=Project.Status.ACTIVE),
+            ),
+            todays_incomplete=(
+                Count(
+                    "projects__tasks__instances",
+                    filter=Q(
+                        projects__tasks__instances__instance_date=today_date,
+                        projects__tasks__instances__status=TaskInstance.Status.INCOMPLETE,
+                    ),
+                )
+                + Count(
+                    "tasks__instances",
+                    filter=Q(
+                        tasks__instances__instance_date=today_date,
+                        tasks__instances__status=TaskInstance.Status.INCOMPLETE,
+                    ),
+                )
+            ),
+        )
+        .order_by("sort_order", "name")
+    )
+    return render(request, "tasks/domains.html", {
+        "domains": domain_list,
+        "date": today_date,
+    })
+
+
+def domain_detail(request, pk):
+    domain = get_object_or_404(Domain, pk=pk)
+
+    project_list = (
+        Project.objects
+        .filter(domain=domain)
+        .annotate(
+            active_tasks=Count("tasks", filter=Q(tasks__is_active=True)),
+        )
+        .order_by("name")
+    )
+
+    domain_tasks = (
+        Task.objects
+        .filter(domain=domain, is_active=True)
+        .order_by("priority", "sort_order", "name")
+    )
+
+    return render(request, "tasks/domain_detail.html", {
+        "domain": domain,
+        "projects": project_list,
+        "domain_tasks": domain_tasks,
+    })
+
+
+@require_POST
+def domain_add_task(request, pk):
+    domain = get_object_or_404(Domain, pk=pk)
+    name = request.POST.get("name", "").strip()
+    project_id = request.POST.get("project_id", "").strip()
+
+    if not name:
+        return redirect("tasks:domain_detail", pk=pk)
+
+    if project_id:
+        project = get_object_or_404(Project, pk=project_id, domain=domain)
+        Task.objects.create(name=name, project=project)
+    else:
+        Task.objects.create(name=name, domain=domain)
+
+    return redirect("tasks:domain_detail", pk=pk)
 
 
 def projects(request):
-    return render(request, "tasks/projects.html")
+    project_list = (
+        Project.objects
+        .select_related("domain")
+        .annotate(
+            active_tasks=Count("tasks", filter=Q(tasks__is_active=True)),
+        )
+        .order_by("domain__sort_order", "domain__name", "name")
+    )
+    return render(request, "tasks/projects.html", {
+        "projects": project_list,
+    })
+
+
+def project_detail(request, pk):
+    project = get_object_or_404(
+        Project.objects.select_related("domain"), pk=pk,
+    )
+    today_date = timezone.localdate()
+
+    tasks = (
+        Task.objects
+        .filter(project=project, is_active=True)
+        .order_by("priority", "sort_order", "name")
+    )
+
+    upcoming = (
+        Task.objects
+        .filter(project=project, is_active=True, due_date__gte=today_date)
+        .order_by("due_date", "priority", "name")
+    )
+
+    start_14 = today_date - datetime.timedelta(days=14)
+    stats = (
+        TaskInstance.objects
+        .filter(
+            task__project=project,
+            instance_date__gte=start_14,
+            instance_date__lte=today_date,
+        )
+        .aggregate(
+            total=Count("pk"),
+            completed=Count("pk", filter=Q(status=TaskInstance.Status.COMPLETE)),
+            incomplete=Count("pk", filter=Q(status=TaskInstance.Status.INCOMPLETE)),
+            skipped=Count("pk", filter=Q(status=TaskInstance.Status.SKIPPED)),
+        )
+    )
+    total = stats["total"] or 0
+    stats["rate"] = round(stats["completed"] / total * 100) if total else 0
+
+    return render(request, "tasks/project_detail.html", {
+        "project": project,
+        "tasks": tasks,
+        "upcoming": upcoming,
+        "stats": stats,
+        "start_14": start_14,
+        "today_date": today_date,
+    })
+
+
+@require_POST
+def project_add_task(request, pk):
+    project = get_object_or_404(Project, pk=pk)
+    name = request.POST.get("name", "").strip()
+    due_date = request.POST.get("due_date", "").strip() or None
+
+    if name:
+        Task.objects.create(name=name, project=project, due_date=due_date)
+
+    return redirect("tasks:project_detail", pk=pk)
 
 
 def task_list(request):
-    return render(request, "tasks/task_list.html")
+    tasks = (
+        Task.objects
+        .select_related("project__domain", "domain")
+        .order_by("is_active", "priority", "sort_order", "name")
+    )
+    return render(request, "tasks/task_list.html", {
+        "tasks": tasks,
+    })
+
+
+def task_detail(request, task_id):
+    task = get_object_or_404(
+        Task.objects.select_related("project__domain", "domain"),
+        pk=task_id,
+    )
+    today_date = timezone.localdate()
+    start_14 = today_date - datetime.timedelta(days=14)
+
+    rule = getattr(task, "schedule_rule", None)
+
+    recent_instances = (
+        TaskInstance.objects
+        .filter(task=task, instance_date__gte=start_14)
+        .order_by("-instance_date")
+    )
+
+    on_today = TaskInstance.objects.filter(
+        task=task, instance_date=today_date,
+    ).exists()
+
+    return render(request, "tasks/task_detail.html", {
+        "task": task,
+        "rule": rule,
+        "recent_instances": recent_instances,
+        "on_today": on_today,
+        "today_date": today_date,
+    })
+
+
+@require_POST
+def task_deactivate(request, task_id):
+    task = get_object_or_404(Task, pk=task_id)
+    task.is_active = not task.is_active
+    task.save(update_fields=["is_active", "updated_at"])
+    return redirect("tasks:task_detail", task_id=task_id)
+
+
+@require_POST
+def task_add_to_today(request, task_id):
+    task = get_object_or_404(Task, pk=task_id)
+    today_date = timezone.localdate()
+    next_order = _next_assigned_order(today_date)
+    TaskInstance.objects.get_or_create(
+        task=task,
+        instance_date=today_date,
+        defaults={
+            "source": TaskInstance.Source.MANUAL,
+            "assigned_order": next_order,
+        },
+    )
+    return redirect("tasks:task_detail", task_id=task_id)
 
 
 def _parse_date(value, fallback):

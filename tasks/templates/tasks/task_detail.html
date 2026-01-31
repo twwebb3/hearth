@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task.name }}{% endblock %}
+
+{% block content %}
+{% include "tasks/_subnav.html" with page_title=task.name %}
+
+{# ── Breadcrumb + status ── #}
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+  {% if task.project %}
+    <a href="{% url 'tasks:domain_detail' pk=task.project.domain.pk %}" style="color: #6b7280; font-size: 13px;">{{ task.project.domain.name }}</a>
+    <span style="color: #9ca3af; font-size: 13px;">&rsaquo;</span>
+    <a href="{% url 'tasks:project_detail' pk=task.project.pk %}" style="color: #6b7280; font-size: 13px;">{{ task.project.name }}</a>
+  {% elif task.domain %}
+    <a href="{% url 'tasks:domain_detail' pk=task.domain.pk %}" style="color: #6b7280; font-size: 13px;">{{ task.domain.name }}</a>
+  {% endif %}
+  {% if not task.is_active %}
+    <span style="font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: #fee2e2; color: #991b1b;">inactive</span>
+  {% endif %}
+</div>
+
+{# ── Details card ── #}
+<div class="card" style="margin: 12px 0 16px;">
+  {% if task.description %}<p style="margin: 0 0 8px; color: #374151;">{{ task.description }}</p>{% endif %}
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #6b7280;">
+    <span>Priority: <strong>{{ task.priority }}</strong></span>
+    <span>Sort order: <strong>{{ task.sort_order }}</strong></span>
+    {% if task.due_date %}<span>Due: <strong style="color: #b45309;">{{ task.due_date|date:"M j, Y" }}</strong></span>{% endif %}
+  </div>
+</div>
+
+{# ── Actions ── #}
+<div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+  <a href="{% url 'tasks:schedule_edit' task_id=task.pk %}" class="btn-link" style="text-decoration: none;">{% if rule %}Edit schedule{% else %}Add schedule{% endif %}</a>
+  {% if rule %}
+  <form method="post" action="{% url 'tasks:schedule_delete' task_id=task.pk %}" style="margin: 0;">
+    {% csrf_token %}
+    <button type="submit" class="btn-link" style="color: #dc2626;">Remove schedule</button>
+  </form>
+  {% endif %}
+  {% if not on_today %}
+  <form method="post" action="{% url 'tasks:task_add_to_today' task_id=task.pk %}" style="margin: 0;">
+    {% csrf_token %}
+    <button type="submit" class="btn-link">Add to today</button>
+  </form>
+  {% else %}
+  <span style="font-size: 13px; color: #065f46; padding: 4px 0;">Already on today</span>
+  {% endif %}
+  <form method="post" action="{% url 'tasks:task_deactivate' task_id=task.pk %}" style="margin: 0;">
+    {% csrf_token %}
+    <button type="submit" class="btn-link" style="{% if task.is_active %}color: #dc2626;{% endif %}">
+      {% if task.is_active %}Deactivate{% else %}Reactivate{% endif %}
+    </button>
+  </form>
+</div>
+
+{# ── Schedule rule ── #}
+{% if rule %}
+<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">Schedule</h2>
+<div class="card" style="margin-bottom: 20px; font-size: 13px;">
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; color: #374151;">
+    <span>RRULE: <code style="background: #f3f4f6; padding: 1px 6px; border-radius: 4px;">{{ rule.rrule }}</code></span>
+    <span>Start: <strong>{{ rule.start_date|date:"M j, Y" }}</strong></span>
+    {% if rule.end_date %}<span>End: <strong>{{ rule.end_date|date:"M j, Y" }}</strong></span>{% endif %}
+    <span>TZ: {{ rule.timezone }}</span>
+  </div>
+</div>
+{% endif %}
+
+{# ── Recent instances (14 days) ── #}
+<h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; margin-bottom: 6px;">
+  Recent instances{% if recent_instances %} ({{ recent_instances|length }}){% endif %}
+</h2>
+
+{% if recent_instances %}
+<div style="display: flex; flex-direction: column; gap: 6px;">
+  {% for inst in recent_instances %}
+  <div class="card" style="display: flex; align-items: center; gap: 10px; {% if inst.status == 'complete' or inst.status == 'skipped' %}opacity: 0.55;{% endif %}">
+    <div style="flex: 1; min-width: 0;">
+      <span style="font-weight: 600;">{{ inst.instance_date|date:"D, M j" }}</span>
+      {% if inst.instance_date == today_date %}<span style="font-size: 11px; background: #dbeafe; color: #1e40af; padding: 1px 6px; border-radius: 4px; margin-left: 4px;">today</span>{% endif %}
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center; font-size: 13px; flex-shrink: 0;">
+      <span style="font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 6px;
+        {% if inst.status == 'complete' %}background: #d1fae5; color: #065f46;
+        {% elif inst.status == 'incomplete' %}background: #fef3c7; color: #92400e;
+        {% else %}background: #e5e7eb; color: #374151;{% endif %}
+      ">{{ inst.status }}</span>
+      <span style="font-size: 11px; color: #9ca3af;">{{ inst.source }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; color: #6b7280; padding: 24px;">
+  No instances in the last 14 days.
+</div>
+{% endif %}
+{% endblock %}

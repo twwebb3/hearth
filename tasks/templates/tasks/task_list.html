@@ -4,5 +4,27 @@
 
 {% block content %}
 {% include "tasks/_subnav.html" with page_title="All Tasks" %}
-<p>All tasks.</p>
+
+{% if tasks %}
+<div style="display: flex; flex-direction: column; gap: 6px;">
+  {% for t in tasks %}
+  <div class="card" style="display: flex; align-items: center; gap: 10px; {% if not t.is_active %}opacity: 0.45;{% endif %}">
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-weight: 600;"><a href="{% url 'tasks:task_detail' task_id=t.pk %}" style="color: inherit; text-decoration: none;">{{ t.name }}</a></div>
+      <div style="font-size: 13px; color: #6b7280;">
+        {% if t.project %}{{ t.project.domain.name }} &rsaquo; {{ t.project.name }}{% elif t.domain %}{{ t.domain.name }}{% endif %}
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center; font-size: 13px; flex-shrink: 0;">
+      {% if t.due_date %}<span style="color: #b45309;">{{ t.due_date|date:"M j" }}</span>{% endif %}
+      {% if not t.is_active %}<span style="font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; background: #fee2e2; color: #991b1b;">inactive</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align: center; color: #6b7280; padding: 24px;">
+  No tasks yet.
+</div>
+{% endif %}
 {% endblock %}
