@@ -156,6 +156,38 @@ class GeneratorIdempotencyTests(TestCase):
             1,
         )
 
+    def test_assigned_order_from_priority_and_sort_order(self):
+        """Generated instances get assigned_order based on task priority then sort_order."""
+        domain = Domain.objects.create(name="OD", sort_order=0)
+        # priority=0 sort_order=10 → should be first (order 0 or 1 depending on setUp task)
+        t_high = Task.objects.create(
+            name="High", domain=domain, priority=0, sort_order=10,
+        )
+        # priority=5 sort_order=1 → lower priority, should come after
+        t_low = Task.objects.create(
+            name="Low", domain=domain, priority=5, sort_order=1,
+        )
+        # priority=0 sort_order=20 → same priority as High but higher sort_order
+        t_mid = Task.objects.create(
+            name="Mid", domain=domain, priority=0, sort_order=20,
+        )
+        for t in (t_high, t_low, t_mid):
+            TaskScheduleRule.objects.create(
+                task=t, rrule="FREQ=DAILY",
+                start_date=datetime.date(2026, 1, 1),
+            )
+        date = datetime.date(2026, 7, 1)
+        generate_instances_for_date(date)
+
+        orders = {
+            inst.task.name: inst.assigned_order
+            for inst in TaskInstance.objects.filter(
+                instance_date=date, task__in=[t_high, t_low, t_mid],
+            ).select_related("task")
+        }
+        self.assertLess(orders["High"], orders["Mid"])
+        self.assertLess(orders["Mid"], orders["Low"])
+
 
 class CompletionOrderTests(TestCase):
     """completion_order must auto-increment per day via the complete endpoint."""
