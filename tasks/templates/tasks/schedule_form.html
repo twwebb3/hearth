@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Schedule – {{ task.name }}{% endblock %}
+
+{% block content %}
+{% include "tasks/_subnav.html" with page_title="Schedule" %}
+<p style="color: #6b7280;">Task: <strong>{{ task.name }}</strong> &mdash; {% if rule %}Edit{% else %}Add{% endif %} schedule</p>
+
+<form method="post" class="card" style="display: flex; flex-direction: column; gap: 12px; max-width: 480px;">
+  {% csrf_token %}
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span style="font-weight: 600; font-size: 14px;">RRULE</span>
+    <input type="text" name="rrule" required
+           value="{{ rule.rrule|default:'' }}"
+           placeholder="FREQ=DAILY or FREQ=WEEKLY;BYDAY=MO,WE,FR"
+           style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
+    <span style="font-size: 12px; color: #6b7280;">Examples: FREQ=DAILY &nbsp; FREQ=WEEKLY;BYDAY=MO,WE,FR</span>
+  </label>
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span style="font-weight: 600; font-size: 14px;">Start date</span>
+    <input type="date" name="start_date" required
+           value="{{ rule.start_date|date:'Y-m-d'|default:'' }}"
+           style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
+  </label>
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span style="font-weight: 600; font-size: 14px;">End date <span style="font-weight: 400; color: #6b7280;">(optional)</span></span>
+    <input type="date" name="end_date"
+           value="{{ rule.end_date|date:'Y-m-d'|default:'' }}"
+           style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
+  </label>
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span style="font-weight: 600; font-size: 14px;">Timezone</span>
+    <input type="text" name="timezone"
+           value="{{ rule.timezone|default:'America/New_York' }}"
+           style="padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;">
+  </label>
+
+  <div style="display: flex; gap: 8px; align-items: center;">
+    <button type="submit" class="btn-link" style="font-weight: 600;">Save</button>
+    <a href="{% url 'tasks:task_list' %}" class="btn-link" style="text-decoration: none;">Cancel</a>
+    {% if rule %}
+    <form method="post" action="{% url 'tasks:schedule_delete' task_id=task.id %}" style="margin-left: auto;">
+      {% csrf_token %}
+      <button type="submit" class="btn-link" style="color: #dc2626;">Remove schedule</button>
+    </form>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

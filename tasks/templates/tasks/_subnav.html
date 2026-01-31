@@ -1,0 +1,10 @@
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h1 style="margin: 0;">{{ page_title }}</h1>
+    <div style="display: flex; gap: 8px;">
+        <a href="{% url 'tasks:today' %}" class="btn-link" style="text-decoration: none;">Today</a>
+        <a href="{% url 'tasks:domains' %}" class="btn-link" style="text-decoration: none;">Domains</a>
+        <a href="{% url 'tasks:projects' %}" class="btn-link" style="text-decoration: none;">Projects</a>
+        <a href="{% url 'tasks:task_list' %}" class="btn-link" style="text-decoration: none;">All Tasks</a>
+        <a href="{% url 'tasks:analytics' %}" class="btn-link" style="text-decoration: none;">Analytics</a>
+    </div>
+</div>

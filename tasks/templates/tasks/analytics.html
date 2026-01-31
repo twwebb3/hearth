@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Task Analytics{% endblock %}
+
+{% block extra_head %}
+<style>
+  .analytics-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .analytics-table th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e5e7eb; color: #374151; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .analytics-table td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
+  .analytics-table tr:last-child td { border-bottom: none; }
+  .analytics-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pct-bar { display: inline-block; height: 8px; border-radius: 4px; background: #10b981; vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "tasks/_subnav.html" with page_title="Analytics" %}
+<p style="margin-top: 0; color: #6b7280;">{{ start|date:"M j, Y" }} &ndash; {{ end|date:"M j, Y" }}</p>
+
+<form method="get" style="display: flex; gap: 8px; align-items: end; margin-bottom: 24px; flex-wrap: wrap;">
+  <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
+    Start
+    <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+  </label>
+  <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">
+    End
+    <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" style="padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+  </label>
+  <button type="submit" class="btn-link" style="font-weight: 600; height: fit-content;">Apply</button>
+</form>
+
+{# ── 1. Completion by Domain ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 10px;">Completion by Domain</h2>
+  {% if by_domain %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Domain</th>
+        <th class="num">Total</th>
+        <th class="num">Done</th>
+        <th class="num">Incomplete</th>
+        <th class="num">Skipped</th>
+        <th style="min-width: 120px;">Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in by_domain %}
+      <tr>
+        <td>
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: {{ d.color_hex }}; vertical-align: middle; margin-right: 6px;"></span>
+          {{ d.name }}
+        </td>
+        <td class="num">{{ d.total }}</td>
+        <td class="num">{{ d.completed }}</td>
+        <td class="num">{{ d.incomplete }}</td>
+        <td class="num">{{ d.skipped }}</td>
+        <td>
+          {% widthratio d.completed d.total 100 as pct %}
+          <span class="pct-bar" style="width: {% widthratio d.completed d.total 100 %}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio d.completed d.total 100 %}%</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No data for this range.</p>
+  {% endif %}
+</div>
+
+{# ── 2. Completion by Project ── #}
+<div class="card" style="margin-bottom: 16px;">
+  <h2 style="margin: 0 0 10px;">Completion by Project</h2>
+  {% if by_project %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Domain</th>
+        <th class="num">Total</th>
+        <th class="num">Done</th>
+        <th class="num">Incomplete</th>
+        <th class="num">Skipped</th>
+        <th style="min-width: 120px;">Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in by_project %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td style="color: #6b7280;">{{ p.domain.name }}</td>
+        <td class="num">{{ p.total }}</td>
+        <td class="num">{{ p.completed }}</td>
+        <td class="num">{{ p.incomplete }}</td>
+        <td class="num">{{ p.skipped }}</td>
+        <td>
+          <span class="pct-bar" style="width: {% widthratio p.completed p.total 100 %}px;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio p.completed p.total 100 %}%</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No data for this range.</p>
+  {% endif %}
+</div>
+
+{# ── 3. Chronic Incompletion ── #}
+<div class="card">
+  <h2 style="margin: 0 0 10px;">Chronic Incompletion</h2>
+  <p style="margin-top: 0; font-size: 13px; color: #6b7280;">Tasks with 5 or more incomplete appearances in this range.</p>
+  {% if chronic %}
+  <table class="analytics-table">
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th>Project</th>
+        <th>Domain</th>
+        <th class="num">Incomplete</th>
+        <th class="num">Total</th>
+        <th style="min-width: 120px;">Incompletion Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in chronic %}
+      <tr>
+        <td>{{ t.name }}</td>
+        <td>{% if t.project %}{{ t.project.name }}{% else %}&mdash;{% endif %}</td>
+        <td style="color: #6b7280;">{% if t.project %}{{ t.project.domain.name }}{% else %}{{ t.domain.name }}{% endif %}</td>
+        <td class="num">{{ t.incomplete_count }}</td>
+        <td class="num">{{ t.total_count }}</td>
+        <td>
+          <span class="pct-bar" style="width: {% widthratio t.incomplete_count t.total_count 100 %}px; background: #ef4444;"></span>
+          <span style="font-size: 12px; color: #6b7280; margin-left: 4px;">{% widthratio t.incomplete_count t.total_count 100 %}%</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color: #6b7280;">No chronically incomplete tasks in this range.</p>
+  {% endif %}
+</div>
+{% endblock %}
