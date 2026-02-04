@@ -4,6 +4,7 @@
 
 {% block content %}
 {% include "tasks/_subnav.html" with page_title="Projects" %}
+<p style="margin-top: 0; color: #6b7280;">{{ date|date:"l, F j, Y" }}</p>
 
 {% if projects %}
 <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -16,6 +17,7 @@
     </div>
     <div style="display: flex; gap: 12px; font-size: 13px; color: #6b7280; flex-shrink: 0; align-items: center;">
       <span>{{ p.active_tasks }} active task{{ p.active_tasks|pluralize }}</span>
+      <span style="{% if p.todays_incomplete %}color: #b45309; font-weight: 600;{% endif %}">{{ p.todays_incomplete }} incomplete today</span>
       <span style="font-size: 11px; text-transform: uppercase; padding: 2px 8px; border-radius: 6px;
         {% if p.status == 'active' %}background: #d1fae5; color: #065f46;
         {% elif p.status == 'paused' %}background: #fef3c7; color: #92400e;
@@ -23,6 +25,11 @@
         {% else %}background: #e5e7eb; color: #374151;{% endif %}
       ">{{ p.status }}</span>
     </div>
+    <form method="post" action="{% url 'tasks:project_delete' pk=p.pk %}" style="flex-shrink: 0;"
+          onsubmit="return confirm('Delete &quot;{{ p.name }}&quot; and all its tasks?');">
+      {% csrf_token %}
+      <button type="submit" style="background: none; border: 1px solid #d1d5db; border-radius: 4px; color: #9ca3af; cursor: pointer; font-size: 14px; padding: 2px 6px; line-height: 1;" title="Delete project">&times;</button>
+    </form>
   </div>
   {% endfor %}
 </div>
@@ -31,4 +38,28 @@
   No projects yet.
 </div>
 {% endif %}
+
+<h3 style="margin-top: 24px;">Add Project</h3>
+<form method="post" class="card" style="display: flex; flex-direction: column; gap: 8px;">
+  {% csrf_token %}
+  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <select name="domain_id" required
+            style="flex: 1; min-width: 140px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+      <option value="">Domain…</option>
+      {% for d in domains %}
+      <option value="{{ d.pk }}">{{ d.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="name" placeholder="Name" required
+           style="flex: 2; min-width: 140px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+    <input type="text" name="description" placeholder="Description (optional)"
+           style="flex: 3; min-width: 180px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+  </div>
+  <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+    <label style="font-size: 13px; color: #6b7280;">Color</label>
+    <input type="color" name="color_hex" value="#6B7280"
+           style="width: 36px; height: 30px; padding: 0; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;">
+    <button type="submit" class="btn btn-primary" style="margin-left: auto;">Add Project</button>
+  </div>
+</form>
 {% endblock %}

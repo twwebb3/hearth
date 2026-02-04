@@ -406,6 +406,13 @@ def domains(request):
     })
 
 
+@require_POST
+def domain_delete(request, pk):
+    domain = get_object_or_404(Domain, pk=pk)
+    domain.delete()
+    return redirect("tasks:domains")
+
+
 def domain_detail(request, pk):
     domain = get_object_or_404(Domain, pk=pk)
 
@@ -451,17 +458,47 @@ def domain_add_task(request, pk):
 
 
 def projects(request):
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        domain_id = request.POST.get("domain_id", "").strip()
+        if name and domain_id:
+            domain = get_object_or_404(Domain, pk=domain_id)
+            Project.objects.create(
+                name=name,
+                domain=domain,
+                description=request.POST.get("description", "").strip(),
+                color_hex=request.POST.get("color_hex", "").strip(),
+            )
+        return redirect("tasks:projects")
+
+    today_date = timezone.localdate()
     project_list = (
         Project.objects
         .select_related("domain")
         .annotate(
             active_tasks=Count("tasks", filter=Q(tasks__is_active=True)),
+            todays_incomplete=Count(
+                "tasks__instances",
+                filter=Q(
+                    tasks__instances__instance_date=today_date,
+                    tasks__instances__status=TaskInstance.Status.INCOMPLETE,
+                ),
+            ),
         )
         .order_by("domain__sort_order", "domain__name", "name")
     )
     return render(request, "tasks/projects.html", {
         "projects": project_list,
+        "date": today_date,
+        "domains": Domain.objects.order_by("sort_order", "name"),
     })
+
+
+@require_POST
+def project_delete(request, pk):
+    project = get_object_or_404(Project, pk=pk)
+    project.delete()
+    return redirect("tasks:projects")
 
 
 def project_detail(request, pk):
